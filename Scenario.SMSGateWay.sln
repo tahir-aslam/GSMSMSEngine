@@ -5,7 +5,7 @@ VisualStudioVersion = 15.0.27004.2002
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Scenario.SMSGateWay", "Scenario.SMSGateWay\Scenario.SMSGateWay.csproj", "{0EA4AB2F-E615-48C5-AE7D-F15D65F1F212}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Scenario.GSMSMSEngine", "GSMSMSEngine\Scenario.GSMSMSEngine\Scenario.GSMSMSEngine.csproj", "{5F8A229F-4742-4BA8-AC83-876BD2314592}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Scenario.GSMSMSEngine", "Scenario.GSMSMSEngine\Scenario.GSMSMSEngine.csproj", "{5F8A229F-4742-4BA8-AC83-876BD2314592}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

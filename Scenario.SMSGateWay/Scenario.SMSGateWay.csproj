@@ -99,7 +99,7 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\GSMSMSEngine\Scenario.GSMSMSEngine\Scenario.GSMSMSEngine.csproj">
+    <ProjectReference Include="..\Scenario.GSMSMSEngine\Scenario.GSMSMSEngine.csproj">
       <Project>{5f8a229f-4742-4ba8-ac83-876bd2314592}</Project>
       <Name>Scenario.GSMSMSEngine</Name>
     </ProjectReference>
