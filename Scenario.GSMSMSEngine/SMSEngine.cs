@@ -1,9 +1,11 @@
 ﻿using GsmComm.GsmCommunication;
 using GsmComm.PduConverter;
 using GsmComm.PduConverter.SmartMessaging;
+using MySql.Data.MySqlClient;
 using Scenario.GSMSMSEngine.Model;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.IO.Ports;
@@ -12,13 +14,14 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Data;
 using System.Windows.Threading;
 
 namespace Scenario.GSMSMSEngine
 {
     public class SMSEngine
     {
-        public static SerialPort port = new SerialPort();
+        //public static SerialPort port = new SerialPort();
         private BackgroundWorker bw;
 
         SMSHistory sh;
@@ -26,34 +29,72 @@ namespace Scenario.GSMSMSEngine
         string a;
         string b;
         int error_no = 0;
-        public GsmCommMain comm;
         private static ushort refNumber;
 
         bool isWholeSent = false;
         int i = 0;
 
+        MySql.Data.MySqlClient.MySqlConnection ConOnline{get; set; }
+        MySql.Data.MySqlClient.MySqlConnection ConLocal { get; set; }
         DispatcherTimer refreshDataTimer;
         DAL.MiscDAL miscDAL;
         public bool m_IsEncoded = false;
+        private bool m_IsSynchronize = true;
+        private bool m_IsOnlineConnectionOpen;
         public List<SMSQueue> m_SmsNos = new List<SMSQueue>();
+        public List<Modem> Modems;
+        Modem SelectedComm;
         public int m_TotalSmsSent = 0;
+        private ObservableCollection<ApplicationLog> _applicationLogsList;
+        ApplicationLog applicationLog;
+        private static object _syncLock = new object();
+        string message;
 
         public SMSEngine()
         {
             miscDAL = new DAL.MiscDAL();
+            Modems = new List<Modem>();            
+            ApplicationLogsList = new ObservableCollection<ApplicationLog>();
+            //Enable the cross acces to this collection elsewhere
+            BindingOperations.EnableCollectionSynchronization(ApplicationLogsList, _syncLock);
+
+            message = "Starting SMS Engine";
+            AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.Initilization.ToString(), message);
 
             try
-            {
-                m_SmsNos = miscDAL.GetSMSQueue();
-                StartSMSEngine();
+            {             
+                ConLocal = miscDAL.OpenLocalDatabaseConnection();
+                m_SmsNos = miscDAL.GetSMSQueue(ConLocal);                
                 StartDataTimer();
+                StartSMSEngine();
+                try
+                {
+                    ConOnline = miscDAL.OpenOnlineDatabaseConnection();
+                    m_IsOnlineConnectionOpen = true;
+                }
+                catch (Exception ex)
+                {
+                    m_IsOnlineConnectionOpen = false;
+                    message = "Online Server Exception: "+ex.Message;
+                    AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.Initilization.ToString(), message);
+                    MessageBox.Show(ex.Message);
+                }
             }
             catch (Exception ex)
             {
+                message = "Exception: " + ex.Message;
+                AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.Initilization.ToString(), message);
                 MessageBox.Show(ex.Message);
             }
-        }
 
+
+
+        }
+        public ObservableCollection<ApplicationLog> ApplicationLogsList
+        {
+            get { return _applicationLogsList; }
+            set { _applicationLogsList = value; }
+        }
         #region Send SMS
 
         static AutoResetEvent readNow = new AutoResetEvent(false);
@@ -61,37 +102,127 @@ namespace Scenario.GSMSMSEngine
         public void StartDataTimer()
         {
             refreshDataTimer = new DispatcherTimer();
-            refreshDataTimer.Interval = new TimeSpan(0, 0, 5);
+            refreshDataTimer.Interval = new TimeSpan(0, 0, 3);
             refreshDataTimer.Tick += refreshDataTimer_Tick;
             refreshDataTimer.Start();
         }
+        void AddLog(string level, DateTime dateTime, string source, string Message)
+        {
+            ApplicationLog applicationLog = new ApplicationLog()
+            {
+                Level = level,
+                CreatedDateTime = dateTime,
+                Source = source,
+                Message = Message
+            };
+            //lock (_syncLock)
+            //{
+                ApplicationLogsList.Insert(0,applicationLog);
+            //}
+        }
+        void SynchronizeData()
+        {
+            if (m_IsSynchronize)
+            {
+                m_IsSynchronize = false;
+                message = "Synchronization started";
+                AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.Synchronization.ToString(), message);
 
+                if (miscDAL.SynchronizeSMSQueue(ConLocal, ConOnline) > 0)
+                {
+                    message = "Synchronization completed";
+                    AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.Synchronization.ToString(), message);
+                }
+                else
+                {
+                    message = "Synchronization completed with not record updated";
+                    AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.Synchronization.ToString(), message);
+                }
+                m_IsSynchronize = true;
+            }
+        }
         void refreshDataTimer_Tick(object sender, EventArgs e)
         {
-            //m_SmsNos = miscDAL.GetSMSQueue().Except(m_SmsNos).ToList();
+            if (m_IsSynchronize)
+            {
+                try
+                {
+                    if (m_IsOnlineConnectionOpen)
+                    {
+                        SynchronizeData();
+                    }
+                    else
+                    {
+                        ConOnline = miscDAL.OpenOnlineDatabaseConnection();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    m_IsSynchronize = true;
+                    //Connection must be valid and open.
+                    if (ex.Message.ToUpper().Contains("CONNECTION"))
+                    {
+                        ConOnline = miscDAL.OpenOnlineDatabaseConnection();
+                    }
+                    message = "Synchronization EXception: " + ex.Message;
+                    AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.Synchronization.ToString(), message);
+                }
+            }           
+        }
+        void AddNewModems()
+        {
+            message = "Add New Modems";
+            AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+            
+            foreach (var portName in SerialPort.GetPortNames())
+            {
+                //if (portName == "COM22" || portName == "COM23" || portName == "COM24" || portName == "COM25" || portName == "COM26" || portName == "COM27" || portName == "COM28")
+                //{
+                try
+                {
+                    if (!Modems.Exists(x => x.GsmCommMain.PortName == portName))
+                    {
+                        //SerialPort port = new SerialPort(portName);
+                        Modem modem = new Modem();
+                        modem.GsmCommMain = OpenPort(portName);
+                        if (modem.GsmCommMain.IsOpen() && modem.GsmCommMain.IsConnected())
+                        {
+                            modem.IsFree = true;
+                            Modems.Add(modem);
+
+                            message = portName + " Successfully added and is Connected";
+                            AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+                        }
+                        else
+                        {
+                            //port.Close();
+                            modem.GsmCommMain.Close();
+
+                            message = portName + " Is not connected";
+                            AddLog(EventLevel.Error.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+                        }
+                    }
+                    else
+                    {
+                        message = portName + " Already Exists";
+                        AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    message = portName + " Exception: " + ex.Message;
+                    AddLog(EventLevel.Error.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+                }
+                //}
+            }
         }
         public void StartSMSEngine()
         {
             try
             {
-                foreach (var portName in SerialPort.GetPortNames())
-                {
-                    if (portName == "COM22")
-                    {
-                        SerialPort port = new SerialPort(portName);
-                        if (port.IsOpen)
-                        {
 
-                        }
-                        else
-                        {
-                            //port.Close();
-                            port.Dispose();
-                        }
-                    }
-                }
+                AddNewModems();
 
-                openPort();
                 bw = new BackgroundWorker();
                 bw.WorkerReportsProgress = true;
                 bw.WorkerSupportsCancellation = true;
@@ -105,26 +236,54 @@ namespace Scenario.GSMSMSEngine
                 MessageBox.Show(ex.Message);
             }
         }
-        public void openPort()
+        public GsmCommMain OpenPort(string portName)
         {
             try
             {
                 //comm = new GsmCommMain("COM22", 115200, 300);
-                comm = new GsmCommMain("COM22", 115200, 300);
+                GsmCommMain comm = new GsmCommMain(portName, 115200, 300);
                 comm.Open();
+                return comm;
             }
             catch (Exception ex)
             {
                 //MessageBox.Show("Opening Port Exception: " + ex.Message);
+                throw ex;
+            }
+        }
+        public void StopSMSEnging()
+        {
+            message = "Stoping SMS Engine";
+            AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.Stopping.ToString(), message);
+
+            foreach (var item in Modems)
+            {
+                try
+                {
+                    if (item.GsmCommMain.IsOpen())
+                    {
+                        message = item.GsmCommMain.PortName +" Closing";
+                        AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.Stopping.ToString(), message);
+
+                        item.GsmCommMain.Close();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    message = "Stoping SMS Engine Execption: "+ex.Message;
+                    AddLog(EventLevel.Error.ToString(), DateTime.Now, EventSource.Stopping.ToString(), message);
+
+                    throw ex;
+                }
             }
         }
         public void closePort()
         {
             try
             {
-                if (comm.IsOpen())
+                if (SelectedComm.GsmCommMain.IsOpen())
                 {
-                    comm.Close();
+                    SelectedComm.GsmCommMain.Close();
                 }
             }
             catch (Exception ex)
@@ -132,43 +291,54 @@ namespace Scenario.GSMSMSEngine
                 throw ex;
             }
         }
+        async void SendMessage(SMSQueue obj, Modem comm, BackgroundWorker worker, DoWorkEventArgs e)
+        {
+            await SendMessageAsync(obj, comm, worker, e);
+        }
         private void bw_DoWork(object sender, DoWorkEventArgs e)
         {
             BackgroundWorker worker = sender as BackgroundWorker;
-            try
+            do
             {
-                do
-                {
-                    foreach (var smsQueue in m_SmsNos)
+                if (Modems.Count > 0)
+                {                    
+                    message = "Background worker started, Modems Count= " + Modems.Count;
+                    AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.bw_DoWork.ToString(), message);
+                    AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.bw_DoWork.ToString(), "Selected Modem:" + SelectedComm.GsmCommMain.PortName);
+
+                    SelectedComm = Modems[0];
+                    try
                     {
-
-                        Thread.Sleep(500);
-
-                        if (sendMsg(smsQueue, worker, e))
-                        {                            
-                            //MessageBox.Show("Message has sent successfully", "Successfully Sent", MessageBoxButton.OK, MessageBoxImage.Information);
-                        }
-                        else
+                        do
                         {
-                            //MessageBox.Show("Failed to send message", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                            foreach (var smsQueue in m_SmsNos)
+                            {
+                                Thread.Sleep(500);
+                                SendMessage(smsQueue, SelectedComm, worker, e);
+                                SelectedComm = SelectModem();
+                            }
+                            m_SmsNos = miscDAL.GetSMSQueue(ConLocal);
                         }
-
+                        while (true);
                     }
-                    m_SmsNos = miscDAL.GetSMSQueue();
-                    Thread.Sleep(1000);                    
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show(ex.Message);
+                    }
+                    finally
+                    {
+                        closePort();
+                    }
                 }
-                while (true);
-
+                else
+                {
+                    AddNewModems();
+                    message = " Modems Count= " + Modems.Count;
+                    AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.bw_DoWork.ToString(), message);
+                    Thread.Sleep(1000);
+                }
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message);
-            }
-            finally
-            {
-                closePort();
-            }
-
+            while (Modems.Count == 0);
         }
         private void bw_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
@@ -187,13 +357,89 @@ namespace Scenario.GSMSMSEngine
                 //   this.status_textblock.Text = "  Successfully Sent!";
             }
         }
-
         private void bw_ProgressChanged(object sender, ProgressChangedEventArgs e)
-        {
+        {            
         }
-        public bool sendMsg(SMSQueue obj, BackgroundWorker worker, DoWorkEventArgs e)
+        Modem SelectModem()
+        {
+            try
+            {
+                do
+                {
+                    AddNewModems(); //if new exists
+                    int totalModems = Modems.Count;
+                    if (Modems.IndexOf(SelectedComm) == Modems.Count - 1)
+                    {
+                        SelectedComm = Modems[0];
+                        if (SelectedComm.IsFree)
+                        {
+                            if (SelectedComm.TotalSmsSent <= 200)
+                            {
+                                if ((SelectedComm.StartTime - DateTime.Now).Minutes < 15)
+                                {
+                                    return SelectedComm;
+                                }
+                            }
+                            else
+                            {
+                                SelectedComm.TotalSmsSent = 0;
+                                SelectedComm.StartTime = DateTime.Now;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        SelectedComm = Modems[Modems.IndexOf(SelectedComm) + 1];
+                        if (SelectedComm.IsFree)
+                        {
+                            if (SelectedComm.TotalSmsSent <= 200)
+                            {
+                                if ((SelectedComm.StartTime - DateTime.Now).Minutes < 15)
+                                {
+                                    return SelectedComm;
+                                }
+                            }
+                            else
+                            {
+                                SelectedComm.TotalSmsSent = 0;
+                                SelectedComm.StartTime = DateTime.Now;
+                            }
+                        }
+                    }
+                }
+                while (true);
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+        public int ModemsCount()
+        {
+            if (Modems != null)
+            {
+                return Modems.Count();
+            }
+            return 0;
+        }
+        void UpdateModemStatus(Modem m)
+        {
+            foreach (var item in Modems.Where(x => x.GsmCommMain.PortName == m.GsmCommMain.PortName))
+                item.IsFree = m.IsFree;
+        }
+        public Task SendMessageAsync(SMSQueue obj, Modem comm, BackgroundWorker worker, DoWorkEventArgs e)
+        {
+            return Task.Run(() => sendMsg(obj, comm, worker, e));
+        }
+        public bool sendMsg(SMSQueue obj, Modem comm, BackgroundWorker worker, DoWorkEventArgs e)
         {
             bool isSend = false;
+            comm.IsFree = false;
+            UpdateModemStatus(comm);
+
+            message = comm.GsmCommMain.PortName+" IsFree=False";
+            AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
+
             i = 0;
 
             SmsSubmitPdu[] pdu;
@@ -210,24 +456,39 @@ namespace Scenario.GSMSMSEngine
             {
                 try
                 {
-                    if (comm.IsConnected())
+                    if (comm.GsmCommMain.IsConnected())
                     {
-                        comm.SendMessage(pdu[j]);
+                        comm.GsmCommMain.SendMessage(pdu[j]);
                         isSend = true;
                         m_TotalSmsSent++;
                         if (j + 1 == pdu.Length)
                         {
+                            if (comm.TotalSmsSent == 0)
+                            {
+                                comm.StartTime = DateTime.Now;
+                            }
+                            comm.IsFree = true;
+                            UpdateModemStatus(comm);
+                            comm.TotalSmsSent = comm.TotalSmsSent + pdu.Length;
                             isWholeSent = true;
                             obj.sms_status = "Sent";
-                        }
+                            obj.updated_date_time = DateTime.Now;
+                            message = comm.GsmCommMain.PortName + " IsFree=True, Receiver="+obj.receiver_cell_no+" Message:"+obj.sms_message;
+                            AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
+                        }                        
                     }
                     else
                     {
+                        message = comm.GsmCommMain.PortName + " IsConnected=False";
+                        AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
+
                         j--;
                         // MessageBox.Show("IsConnected=false", "Error", MessageBoxButton.OK, MessageBoxImage.Stop);
                         Thread.Sleep(1000);
-                        openPort();
+                        OpenPort(comm.GsmCommMain.PortName);
                         isSend = false;
+                        comm.IsFree = false;
+                        UpdateModemStatus(comm);
                         obj.sms_status = "Not Sent";
                         Thread.Sleep(1000);
 
@@ -236,60 +497,71 @@ namespace Scenario.GSMSMSEngine
                 }
                 catch (Exception ex)
                 {
-                    if (ex.Message == "Message service error 50 occurred.")
+                    if (ex.Message.Contains("Message service error 500 occurred."))
                     {
                     }
-                    else 
+                    //Access is denied.
+                    else if (ex.Message.Contains("Access is denied."))
                     {
-                    }                    
+                    }
+                    else
+                    {
+                    }
                     isSend = false;
                     obj.sms_status = "Not Sent";
+                    comm.IsFree = false;
+                    UpdateModemStatus(comm);
+
+                    message = comm.GsmCommMain.PortName + " Exception:"+ex.Message;
+                    AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
                 }
 
             }
             // saved to sms history table whether sent or not
-
-            sh = new SMSHistory();
-            sh.sender_id = obj.id.ToString();
-            sh.sender_name = obj.receiver_name;
-            sh.class_id = obj.class_id.ToString();
-            sh.class_name = obj.class_name;
-            sh.section_id = obj.section_id.ToString();
-            sh.section_name = obj.section_name;
-            sh.cell = obj.receiver_cell_no;
-            sh.msg = obj.sms_message;
-            sh.sms_type = obj.sms_type;
-            sh.created_by = obj.created_by;
-            sh.date_time = DateTime.Now;
-
-            if (miscDAL.InsertSMSHistory(sh) > 0)
+            //change for queue
+            if (isSend)
             {
-                if (miscDAL.UpdateSMSQueue(obj) > 0)
-                {
+                sh = new SMSHistory();
+                sh.sender_id = obj.id.ToString();
+                sh.sender_name = obj.receiver_name;
+                sh.class_id = obj.class_id.ToString();
+                sh.class_name = obj.class_name;
+                sh.section_id = obj.section_id.ToString();
+                sh.section_name = obj.section_name;
+                sh.cell = obj.receiver_cell_no;
+                sh.msg = obj.sms_message;
+                sh.sms_type = obj.sms_type;
+                sh.created_by = obj.created_by;
+                sh.date_time = DateTime.Now;
 
+                if (miscDAL.InsertSMSHistory(sh,ConLocal) > 0)
+                {
+                    if (miscDAL.UpdateSMSQueue(obj,ConLocal) > 0)
+                    {
+
+                    }
+                    else
+                    {
+                        MessageBox.Show("Not updated sms queue");
+                    }
                 }
                 else
                 {
-                    MessageBox.Show("Not updated sms queue");
+                    MessageBox.Show("Sms History not inserted");
                 }
-            }
-            else
-            {
-                MessageBox.Show("Sms History not inserted");
-            }
 
-
+            }
             return isSend;
         }
         public void setConnected()
         {
-            string cmbCOM = "COM22";
+            string cmbCOM = SelectedComm.GsmCommMain.PortName;
             if (cmbCOM == "")
             {
                 MessageBox.Show("Invalid Port Name");
                 return;
             }
-            comm = new GsmCommMain(cmbCOM, 115200, 150);
+            SelectedComm.GsmCommMain = new GsmCommMain(cmbCOM, 115200, 150);
             //Cursor.Current = Cursors.Default;
 
             bool retry;
@@ -299,7 +571,7 @@ namespace Scenario.GSMSMSEngine
                 try
                 {
                     //Cursor.Current = Cursors.WaitCursor;
-                    comm.Open();
+                    SelectedComm.GsmCommMain.Open();
                     //Cursor.Current = Cursors.Default;
                     MessageBox.Show("Modem Connected Sucessfully");
                 }
@@ -311,7 +583,6 @@ namespace Scenario.GSMSMSEngine
             while (retry);
 
         }
-
         static void DataReceived(object sender, SerialDataReceivedEventArgs e)
         {
             try
