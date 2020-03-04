@@ -14,7 +14,7 @@ namespace Scenario.GSMSMSEngine.DAL
         public MiscDAL()
         {
         }
-
+       
         public MySqlConnection OpenOnlineDatabaseConnection()
         {
             try
@@ -23,7 +23,7 @@ namespace Scenario.GSMSMSEngine.DAL
                 con.Open();
                 return con;
             }
-            catch (Exception ex)
+            catch (MySqlException ex)
             {
                 throw ex;
             }
@@ -49,7 +49,7 @@ namespace Scenario.GSMSMSEngine.DAL
                 using (MySqlCommand cmd = new MySqlCommand())
                 {
                     cmd.Connection = con;
-                    cmd.CommandText = "Select * from sms_sms_queue where is_sent='N'";                    
+                    cmd.CommandText = "Select * from sms_sms_queue where is_sent='N'";
 
                     MySqlDataReader reader = cmd.ExecuteReader();
                     SMSQueue obj;
@@ -70,7 +70,7 @@ namespace Scenario.GSMSMSEngine.DAL
                             sort_order = Convert.ToInt32(reader["sort_order"]),
                             date_time = Convert.ToDateTime(reader["date_time"]),
                             isEncoded = Convert.ToInt32(reader["isEncoded"]),
-                            isSynchronized = Convert.ToInt32(reader["isSynchronized"]),                            
+                            isSynchronized = Convert.ToInt32(reader["isSynchronized"]),
                             class_id = 0,
                             section_id = 0,
                         };
@@ -85,31 +85,36 @@ namespace Scenario.GSMSMSEngine.DAL
             }
             return lst;
         }
-        public int InsertSMSHistory(SMSHistory sh, MySqlConnection con)
+        public int InsertSMSHistory(SMSHistory sh)
         {
             int i = 0;
             try
             {
-                using (MySqlCommand cmd = new MySqlCommand())
+                using (MySqlConnection con = new MySqlConnection(ConnectionString.con_string))
                 {
-                    cmd.CommandText = "INSERT INTO sms_history(sender_id,sender_name,class_id,class_name,section_id,section_name,cell,created_by,date_time,sms_type,msg) Values(@sender_id,@sender_name,@class_id,@class_name,@section_id,@section_name,@cell,@created_by,@date_time,@sms_type,@msg)";
-                    cmd.Connection = con;
-                    //cmd.CommandType = System.Data.CommandType.StoredProcedure;
+                    using (MySqlCommand cmd = new MySqlCommand())
+                    {                       
+                        cmd.CommandText = "INSERT INTO sms_history(sender_id,sender_name,class_id,class_name,section_id,section_name,cell,created_by,date_time,sms_type,msg) Values(@sender_id,@sender_name,@class_id,@class_name,@section_id,@section_name,@cell,@created_by,@date_time,@sms_type,@msg)";
+                        cmd.Connection = con;
+                        
+                        //cmd.CommandType = System.Data.CommandType.StoredProcedure;
 
-                    cmd.Parameters.Add("@sender_id", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.sender_id;
-                    cmd.Parameters.Add("@sender_name", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.sender_name;
-                    cmd.Parameters.Add("@class_id", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.class_id;
-                    cmd.Parameters.Add("@class_name", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.class_name;
-                    cmd.Parameters.Add("@section_id", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.section_id;
-                    cmd.Parameters.Add("@section_name", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.section_name;
-                    cmd.Parameters.Add("@cell", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.cell;
-                    cmd.Parameters.Add("@msg", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.msg;
-                    cmd.Parameters.Add("@sms_type", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.sms_type;
-                    cmd.Parameters.Add("@created_by", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.created_by;
-                    cmd.Parameters.Add("@date_time", MySql.Data.MySqlClient.MySqlDbType.DateTime).Value = sh.date_time;
-                                        
-                    i = Convert.ToInt32(cmd.ExecuteNonQuery());
-                    con.Close();
+                        cmd.Parameters.Add("@sender_id", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.sender_id;
+                        cmd.Parameters.Add("@sender_name", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.sender_name;
+                        cmd.Parameters.Add("@class_id", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.class_id;
+                        cmd.Parameters.Add("@class_name", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.class_name;
+                        cmd.Parameters.Add("@section_id", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.section_id;
+                        cmd.Parameters.Add("@section_name", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.section_name;
+                        cmd.Parameters.Add("@cell", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.cell;
+                        cmd.Parameters.Add("@msg", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.msg;
+                        cmd.Parameters.Add("@sms_type", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.sms_type;
+                        cmd.Parameters.Add("@created_by", MySql.Data.MySqlClient.MySqlDbType.VarChar).Value = sh.created_by;
+                        cmd.Parameters.Add("@date_time", MySql.Data.MySqlClient.MySqlDbType.DateTime).Value = sh.date_time;
+
+                        con.Open();
+                        i = Convert.ToInt32(cmd.ExecuteNonQuery());
+                        con.Close();
+                    }
                 }
             }
             catch (MySqlException ex)
@@ -118,24 +123,29 @@ namespace Scenario.GSMSMSEngine.DAL
             }
             return i;
         }
-        public int UpdateSMSQueue(SMSQueue obj, MySqlConnection con)
+        public int UpdateSMSQueue(SMSQueue obj)
         {
             int i = 0;
             try
             {
-                using (MySqlCommand cmd = new MySqlCommand())
+                using (MySqlConnection con = new MySqlConnection(ConnectionString.con_string))
                 {
-                    cmd.CommandText = "Update sms_sms_queue SET is_sent='Y', updated_date_time=@updated_date_time where id=@id";
-                    cmd.Connection = con;                    
+                    using (MySqlCommand cmd = new MySqlCommand())
+                    {
+                        cmd.CommandText = "Update sms_sms_queue SET is_sent='Y', updated_date_time=@updated_date_time, sender_com_port=@sender_com_port, sender_cell_no=@sender_cell_no, sms_length=@sms_length where id=@id";
+                        cmd.Connection = con;
 
-                    cmd.Parameters.Add("@id", MySqlDbType.Int32).Value = obj.id;
-                    cmd.Parameters.Add("@updated_date_time", MySqlDbType.DateTime).Value = obj.updated_date_time;
-                    cmd.Parameters.Add("@id", MySqlDbType.Int32).Value = obj.id;
+                        cmd.Parameters.Add("@id", MySqlDbType.Int32).Value = obj.id;
+                        cmd.Parameters.Add("@updated_date_time", MySqlDbType.DateTime).Value = obj.updated_date_time;
+                        cmd.Parameters.Add("@sender_com_port", MySqlDbType.VarChar).Value = obj.sender_com_port;
+                        cmd.Parameters.Add("@sender_cell_no", MySqlDbType.VarChar).Value = obj.sender_cell_no;
+                        cmd.Parameters.Add("@sms_length", MySqlDbType.Int32).Value = obj.sms_length;
 
-                    i = Convert.ToInt32(cmd.ExecuteNonQuery());
-                    cmd.Parameters.Clear();
+                        con.Open();
+                        i = Convert.ToInt32(cmd.ExecuteNonQuery());
+                        con.Close();
+                    }
                 }
-
             }
             catch (MySqlException ex)
             {
@@ -155,7 +165,7 @@ namespace Scenario.GSMSMSEngine.DAL
                 using (MySqlCommand cmd = new MySqlCommand())
                 {
                     cmd.Connection = conLocal;
-                    cmd.CommandText = "Select * from sms_sms_queue where is_sent='Y' && isSynchronized=0";                    
+                    cmd.CommandText = "Select * from sms_sms_queue where is_sent='Y' && isSynchronized=0";
 
                     MySqlDataReader reader = cmd.ExecuteReader();
                     SMSQueue obj;
@@ -163,9 +173,9 @@ namespace Scenario.GSMSMSEngine.DAL
                     {
                         obj = new SMSQueue()
                         {
-                            id = Convert.ToInt32(reader["id"]),                            
+                            id = Convert.ToInt32(reader["id"]),
                             updated_date_time = HelperClass.ConvertFromDBVal<DateTime>(reader["updated_date_time"]),
-                            downloaded_date_time = HelperClass.ConvertFromDBVal<DateTime>(reader["downloaded_date_time"]),                            
+                            downloaded_date_time = HelperClass.ConvertFromDBVal<DateTime>(reader["downloaded_date_time"]),
                         };
                         lst.Add(obj);
                     }
@@ -177,16 +187,19 @@ namespace Scenario.GSMSMSEngine.DAL
                 {
                     using (MySqlCommand cmd = new MySqlCommand())
                     {
-                        cmd.CommandText = "Update sms_sms_queue SET is_sent='Y', updated_date_time=@updated_date_time, downloaded_date_time=@downloaded_date_time where id=@id";
+                        cmd.CommandText = "Update sms_sms_queue SET is_sent='Y', updated_date_time=@updated_date_time, sender_com_port=@sender_com_port, sender_cell_no=@sender_cell_no, sms_length=@sms_length, downloaded_date_time=@downloaded_date_time where id=@id";
                         cmd.Connection = conOnline;
 
                         cmd.Parameters.Add("@id", MySqlDbType.Int32).Value = obj.id;
                         cmd.Parameters.Add("@updated_date_time", MySqlDbType.DateTime).Value = obj.updated_date_time;
                         cmd.Parameters.Add("@downloaded_date_time", MySqlDbType.DateTime).Value = obj.downloaded_date_time;
+                        cmd.Parameters.Add("@sender_com_port", MySqlDbType.VarChar).Value = obj.sender_com_port;
+                        cmd.Parameters.Add("@sender_cell_no", MySqlDbType.VarChar).Value = obj.sender_cell_no;
+                        cmd.Parameters.Add("@sms_length", MySqlDbType.Int32).Value = obj.sms_length;
 
                         result = Convert.ToInt32(cmd.ExecuteNonQuery());
                         cmd.Parameters.Clear();
-                    }                    
+                    }
 
                     if (result > 0)
                     {
@@ -321,14 +334,14 @@ namespace Scenario.GSMSMSEngine.DAL
                     cmd.Parameters.Clear();
                 }
 
-                if (i>0)
+                if (i > 0)
                 {
                     using (MySqlCommand cmd = new MySqlCommand())
                     {
                         cmd.CommandText = "Update sms_sms_queue SET isSynchronized=1 where id=@id";
-                        cmd.Connection = conLocal;                       
+                        cmd.Connection = conLocal;
 
-                        cmd.Parameters.Add("@id", MySqlDbType.Int32).Value = obj.id;                        
+                        cmd.Parameters.Add("@id", MySqlDbType.Int32).Value = obj.id;
                         i = Convert.ToInt32(cmd.ExecuteNonQuery());
                         cmd.Parameters.Clear();
                     }
@@ -348,7 +361,7 @@ namespace Scenario.GSMSMSEngine.DAL
                 using (MySqlCommand cmd = new MySqlCommand())
                 {
                     cmd.Connection = con;
-                    cmd.CommandText = "Select * from sms_sms_queue where is_sent='N'";                    
+                    cmd.CommandText = "Select * from sms_sms_queue where is_sent='N'";
 
                     MySqlDataReader reader = cmd.ExecuteReader();
                     SMSQueue obj;
