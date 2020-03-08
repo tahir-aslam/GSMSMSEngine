@@ -180,13 +180,14 @@ namespace Scenario.GSMSMSEngine
             try
             {                //comm = new GsmCommMain("COM22", 115200, 300);               
                 comm.Open();
+                comm.EnablePermanentSmsBatchMode();
                 comm.PhoneConnected += Comm_PhoneConnected;
                 comm.PhoneDisconnected += Comm_PhoneDisconnected;
 
                 comm.MessageSendComplete += Comm_MessageSendComplete;
                 comm.MessageSendFailed += Comm_MessageSendFailed;
                 comm.MessageSendStarting += Comm_MessageSendStarting;
-                comm.MessageReceived += Comm_MessageReceived;              
+                //comm.MessageReceived += Comm_MessageReceived;              
             }
             catch (Exception ex)
             {
@@ -195,27 +196,19 @@ namespace Scenario.GSMSMSEngine
             }
             return comm;
         }
-
-        private void Comm_MessageReceived(object sender, MessageReceivedEventArgs e)
-        {
-            //throw new NotImplementedException();
-        }
-
+        
         private void Comm_MessageSendStarting(object sender, MessageEventArgs e)
         {
             //throw new NotImplementedException();
         }
-
         private void Comm_MessageSendFailed(object sender, MessageErrorEventArgs e)
         {
             //throw new NotImplementedException();
         }
-
         private void Comm_MessageSendComplete(object sender, MessageEventArgs e)
         {
             //throw new NotImplementedException();
         }
-
         private void Comm_PhoneDisconnected(object sender, EventArgs e)
         {
             GsmCommMain obj = sender as GsmCommMain;
@@ -224,7 +217,7 @@ namespace Scenario.GSMSMSEngine
                 message = obj.PortName + " Phone disconected";
                 AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
 
-                 obj.Close();
+                 //obj.Close();
                 Modems.Remove(Modems.Where(x => x.GsmCommMain.PortName == obj.PortName).First());
             }
             catch (Exception ex)
@@ -233,12 +226,17 @@ namespace Scenario.GSMSMSEngine
                 AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
             }
         }
-
         private void Comm_PhoneConnected(object sender, EventArgs e)
         {            
             GsmCommMain obj = sender as GsmCommMain;
             message = obj.PortName + " Phone Connected";
             AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+        }
+        private void DisconnectEvents(Modem comm)
+        {
+            comm.GsmCommMain.MessageSendStarting -= new GsmCommMain.MessageEventHandler(this.Comm_MessageSendStarting);
+            comm.GsmCommMain.MessageSendComplete -= new GsmCommMain.MessageEventHandler(this.Comm_MessageSendComplete);
+            comm.GsmCommMain.MessageSendFailed -= new GsmCommMain.MessageErrorEventHandler(this.Comm_MessageSendFailed);
         }
 
         public void StopSMSEnging()
@@ -384,7 +382,7 @@ namespace Scenario.GSMSMSEngine
                 comm.IsFree = false;
                 UpdateModemStatus(comm);
 
-                message = comm.GsmCommMain.PortName + "-" + comm.TotalSmsSent + " IsFree=False  Start Sending Message";
+                message = comm.GsmCommMain.PortName + "-" + comm.TotalSmsSent + " IsFree="+ comm .IsFree+ " Start Sending Message";
                 AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
 
                 i = 0;
@@ -403,9 +401,11 @@ namespace Scenario.GSMSMSEngine
                 {
                     try
                     {
-                        if (comm.GsmCommMain.IsConnected() && comm.GsmCommMain.IsOpen())
+                        if (comm.GsmCommMain.IsConnected() && comm.GsmCommMain.IsOpen() && Modems.Count>0)
                         {
-                            comm.GsmCommMain.SendMessage(pdu[j]);
+                            comm.GsmCommMain.SendMessage(pdu[j], true);
+                            //comm.GsmCommMain.EnablePermanentSmsBatchMode();
+                            Thread.Sleep(1000);
                             isSend = true;
                             m_TotalSmsSent++;
                             if (j + 1 == pdu.Length)
@@ -479,7 +479,7 @@ namespace Scenario.GSMSMSEngine
                             AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
                         }
                         else if (ex.Message.Contains("No data received from phone after waiting for"))
-                        {
+                        {                            
                             if (!comm.GsmCommMain.IsOpen())
                             {
                                 try
@@ -582,17 +582,33 @@ namespace Scenario.GSMSMSEngine
                                 foreach (var smsQueue in m_SmsNos)
                                 {
                                     Thread.Sleep(500);
-                                    SendMessage(smsQueue, SelectedComm, worker, e);
+                                    if (SelectedComm != null && Modems.Count > 0)
+                                    {
+                                        SendMessage(smsQueue, SelectedComm, worker, e);
+                                    }
                                     Thread.Sleep(500);
                                     //deep copy for selected item
-                                    Modem _selectedModem = SelectModem(SelectedComm);
-                                    SelectedComm = new Modem()
+                                    try
                                     {
-                                        GsmCommMain = _selectedModem.GsmCommMain,
-                                        IsFree = _selectedModem.IsFree,
-                                        StartTime = _selectedModem.StartTime,
-                                        TotalSmsSent = _selectedModem.TotalSmsSent,
-                                    };
+                                        Modem _selectedModem = SelectModem(SelectedComm);
+                                        if (_selectedModem != null)
+                                        {
+                                            SelectedComm = new Modem()
+                                            {
+                                                GsmCommMain = _selectedModem.GsmCommMain,
+                                                IsFree = _selectedModem.IsFree,
+                                                StartTime = _selectedModem.StartTime,
+                                                TotalSmsSent = _selectedModem.TotalSmsSent,
+                                            };
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        SelectedComm = null;
+                                        message = "Selected Modem = Null ";
+                                        AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.bw_DoWork.ToString(), message);
+                                    }
+                                    
                                 }
                                 m_SmsNos = miscDAL.GetSMSQueue(ConLocal);
                             }
@@ -691,25 +707,12 @@ namespace Scenario.GSMSMSEngine
                 //}
             }
 
-            //try
-            //{
-            //    //clear extra modems in modems list
-            //    string[] ports = SerialPort.GetPortNames();
-            //    foreach (var modem in Modems)
-            //    {
-            //        if (!ports.Equals(modem.GsmCommMain.PortName))
-            //        {
-            //            Modems.Remove(Modems.Where(x => x.GsmCommMain.PortName == modem.GsmCommMain.PortName).First());
-            //            message = modem.GsmCommMain.PortName+ "  Remove successfully: ";
-            //            AddLog(EventLevel.Error.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
-            //        }
-            //    }
-            //}
-            //catch (Exception ex)
-            //{
-            //    message = "Clear Modem Exception: " + ex.Message;
-            //    AddLog(EventLevel.Error.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
-            //}
+            if (SerialPort.GetPortNames().Count() == 0)
+            {
+                message = "No Port Found SerialPort.GetPortNames()";
+                AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+            }
+            
         }
         Modem SelectModem(Modem SelectedComm)
         {
@@ -719,75 +722,93 @@ namespace Scenario.GSMSMSEngine
                 {
                     AddNewModems(); //if new exists
                     int totalModems = Modems.Count;
-                    if (Modems.IndexOf(SelectedComm) == Modems.Count - 1)
+                    if (Modems.Count > 0)
                     {
-                        SelectedComm = Modems[0];
-                        if (SelectedComm.IsFree)
+                        if (Modems.IndexOf(SelectedComm) == Modems.Count - 1)
                         {
-                            if (SelectedComm.TotalSmsSent <= 12)
+                            SelectedComm = Modems[0];
+                            if (SelectedComm.IsFree && SelectedComm.GsmCommMain.IsConnected())
                             {
-                                return SelectedComm;
-                            }
-                            else
-                            {
-                                if ((DateTime.Now - SelectedComm.StartTime).Minutes >= 2)
+                                if (SelectedComm.TotalSmsSent <= 12)
                                 {
-                                    SelectedComm.TotalSmsSent = 0;
-                                    SelectedComm.StartTime = DateTime.Now;
+                                    message = SelectedComm.GsmCommMain.PortName + "-" + SelectedComm.TotalSmsSent + " Selected";
+                                    AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.SelectModem.ToString(), message);
+
+                                    return SelectedComm;
                                 }
                                 else
                                 {
-                                    //if time not completed
-                                    message = SelectedComm.GsmCommMain.PortName + "-" + SelectedComm.TotalSmsSent + " Is Idle for time 15min=200sms";
-                                    AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+                                    if ((DateTime.Now - SelectedComm.StartTime).Minutes >= 1)
+                                    {
+                                        SelectedComm.TotalSmsSent = 0;
+                                        SelectedComm.StartTime = DateTime.Now;
+
+                                        message = SelectedComm.GsmCommMain.PortName + "-" + SelectedComm.TotalSmsSent + " Started Again After Idle";
+                                        AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.SelectModem.ToString(), message);
+                                    }
+                                    else
+                                    {
+                                        //if time not completed
+                                        message = SelectedComm.GsmCommMain.PortName + "-" + SelectedComm.TotalSmsSent + " Is Idle for time 15min=200sms";
+                                        AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.SelectModem.ToString(), message);
+                                    }
                                 }
+                            }
+                            else
+                            {
+                                //if modem not free
+                                message = SelectedComm.GsmCommMain.PortName + "-" + SelectedComm.TotalSmsSent + " IsFree=" + SelectedComm.IsFree + " IsConnected=" + SelectedComm.GsmCommMain.IsConnected();
+                                AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.SelectModem.ToString(), message);
                             }
                         }
                         else
                         {
-                            //if modem not free
-                            message = SelectedComm.GsmCommMain.PortName + "-" + SelectedComm.TotalSmsSent + " Is not free";
-                            AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+                            SelectedComm = Modems[Modems.IndexOf(SelectedComm) + 1];
+                            if (SelectedComm.IsFree && SelectedComm.GsmCommMain.IsConnected())
+                            {
+                                if (SelectedComm.TotalSmsSent <= 12)
+                                {
+                                    return SelectedComm;
+                                }
+                                else
+                                {
+                                    if ((DateTime.Now - SelectedComm.StartTime).Minutes >= 1)
+                                    {
+                                        SelectedComm.TotalSmsSent = 0;
+                                        SelectedComm.StartTime = DateTime.Now;
+
+                                        message = SelectedComm.GsmCommMain.PortName + "-" + SelectedComm.TotalSmsSent + " Started Again After Idle";
+                                        AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.SelectModem.ToString(), message);
+                                    }
+                                    else
+                                    {
+                                        message = SelectedComm.GsmCommMain.PortName + "-" + SelectedComm.TotalSmsSent + " Is Idle for time 15min=200sms";
+                                        AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.SelectModem.ToString(), message);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                //if modem not free
+                                message = SelectedComm.GsmCommMain.PortName + "-" + SelectedComm.TotalSmsSent + " Is not free";
+                                AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.SelectModem.ToString(), message);
+                            }
                         }
+                        Thread.Sleep(500);
                     }
                     else
                     {
-                        SelectedComm = Modems[Modems.IndexOf(SelectedComm) + 1];
-                        if (SelectedComm.IsFree)
-                        {
-                            if (SelectedComm.TotalSmsSent <= 12)
-                            {
-                                return SelectedComm;
-                            }
-                            else
-                            {
-                                if ((DateTime.Now - SelectedComm.StartTime).Minutes >= 2)
-                                {
-                                    SelectedComm.TotalSmsSent = 0;
-                                    SelectedComm.StartTime = DateTime.Now;
-                                }
-                                else
-                                {
-                                    message = SelectedComm.GsmCommMain.PortName + "-" + SelectedComm.TotalSmsSent + " Is Idle for time 15min=200sms";
-                                    AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
-                                }
-                            }
-                        }
-                        else
-                        {
-                            //if modem not free
-                            message = SelectedComm.GsmCommMain.PortName + "-" + SelectedComm.TotalSmsSent + " Is not free";
-                            AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
-                        }
+                        // if no modem exists
+                        message = "Modems Count="+Modems.Count;
+                        AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.SelectModem.ToString(), message);
                     }
-                    Thread.Sleep(500);
                 }
                 while (true);
             }
             catch (Exception ex)
             {
                 message = "Select Modem Exception: "+ex.Message;
-                AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+                AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.SelectModem.ToString(), message);
                 throw ex;
             }
         }

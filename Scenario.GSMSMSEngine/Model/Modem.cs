@@ -15,4 +15,6 @@ namespace Scenario.GSMSMSEngine.Model
         public int TotalSmsSent { get; set; }
         public DateTime StartTime { get; set; } 
     }
+
+
 }

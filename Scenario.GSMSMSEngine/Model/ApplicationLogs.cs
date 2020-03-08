@@ -27,6 +27,7 @@ namespace Scenario.GSMSMSEngine.Model
     public enum EventSource
     {
         AddModem,
+        SelectModem,
         bw_DoWork,
         Initilization,
         Stopping,
