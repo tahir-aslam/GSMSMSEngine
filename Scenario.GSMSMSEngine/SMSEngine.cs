@@ -479,22 +479,36 @@ namespace Scenario.GSMSMSEngine
                             AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
                         }
                         else if (ex.Message.Contains("No data received from phone after waiting for"))
-                        {                            
-                            if (!comm.GsmCommMain.IsOpen())
+                        {
+                            try
                             {
-                                try
-                                {
-                                    OpenPort(comm.GsmCommMain.PortName);
-                                    Thread.Sleep(1000);
-                                    comm.IsFree = true;
-                                    UpdateModemStatus(comm);
-                                }
-                                catch (Exception exx)
-                                {
-                                    comm.IsFree = false;
-                                    UpdateModemStatus(comm);
-                                }
+                                Thread.Sleep(1000);
+                                Modems.Remove(Modems.Where(x => x.GsmCommMain.PortName == comm.GsmCommMain.PortName).First());
+                                message = comm.GsmCommMain.PortName + " Removed";
+                                AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
+
                             }
+                            catch (Exception exx)
+                            {
+                                message = comm.GsmCommMain.PortName + " Removed Exception: "+exx.Message;
+                                AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
+                            }
+                            Thread.Sleep(1000);
+                            //if (!comm.GsmCommMain.IsOpen())
+                            //{
+                            //    try
+                            //    {
+                            //        OpenPort(comm.GsmCommMain.PortName);
+                            //        Thread.Sleep(1000);
+                            //        comm.IsFree = true;
+                            //        UpdateModemStatus(comm);
+                            //    }
+                            //    catch (Exception exx)
+                            //    {
+                            //        comm.IsFree = false;
+                            //        UpdateModemStatus(comm);
+                            //    }
+                            //}
                         }
                         else
                         {
@@ -565,7 +579,7 @@ namespace Scenario.GSMSMSEngine
                         message = "Background worker started, Modems Count= " + Modems.Count;
                         AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.bw_DoWork.ToString(), message);
 
-                        //deep copy for selected item
+                        //deep copy for selected Comm
                         SelectedComm = new Modem()
                         {
                             GsmCommMain = Modems[0].GsmCommMain,
@@ -601,6 +615,7 @@ namespace Scenario.GSMSMSEngine
                                                 TotalSmsSent = _selectedModem.TotalSmsSent,
                                             };
                                         }
+                                        m_SmsNos = miscDAL.GetSMSQueue(ConLocal);
                                     }
                                     catch (Exception ex)
                                     {
@@ -738,7 +753,7 @@ namespace Scenario.GSMSMSEngine
                                 }
                                 else
                                 {
-                                    if ((DateTime.Now - SelectedComm.StartTime).Minutes >= 1)
+                                    if ((DateTime.Now - SelectedComm.StartTime).Minutes >= 2)
                                     {
                                         SelectedComm.TotalSmsSent = 0;
                                         SelectedComm.StartTime = DateTime.Now;
@@ -772,7 +787,7 @@ namespace Scenario.GSMSMSEngine
                                 }
                                 else
                                 {
-                                    if ((DateTime.Now - SelectedComm.StartTime).Minutes >= 1)
+                                    if ((DateTime.Now - SelectedComm.StartTime).Minutes >= 2)
                                     {
                                         SelectedComm.TotalSmsSent = 0;
                                         SelectedComm.StartTime = DateTime.Now;

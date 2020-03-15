@@ -87,26 +87,40 @@ namespace Scenario.SMSGateWay
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
-            m_SMSEngine = new SMSEngine();
-            //v_log_datagrid.ItemsSource = m_SMSEngine.m_ApplicationLogsList.OrderByDescending(x=>x.CreatedDateTime);
-            this.DataContext = m_SMSEngine;
-            StartRefreshTimer();
-            v_MessageBox.Text = "Started";
+            try
+            {
+                m_SMSEngine = new SMSEngine();
+                //v_log_datagrid.ItemsSource = m_SMSEngine.m_ApplicationLogsList.OrderByDescending(x=>x.CreatedDateTime);
+                this.DataContext = m_SMSEngine;
+                StartRefreshTimer();
+                v_MessageBox.Text = "Started";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
         }
 
         void StartRefreshTimer()
         {
             refreshDataTimer = new DispatcherTimer();
-            refreshDataTimer.Interval = new TimeSpan(0, 0, 2);
+            refreshDataTimer.Interval = new TimeSpan(0, 0, 1);
             refreshDataTimer.Tick += refreshDataTimer_Tick;
             refreshDataTimer.Start();
         }
 
         void refreshDataTimer_Tick(object sender, EventArgs e)
         {
-            v_TotalSmsSent.Text = m_SMSEngine.m_TotalSmsSent.ToString();
-            v_TotalSmsQueued.Text = m_SMSEngine.m_SmsNos.Count().ToString();
-            v_TotalModems.Text = m_SMSEngine.ModemsCount().ToString();
+            try
+            {
+                v_TotalSmsSent.Text = m_SMSEngine.m_TotalSmsSent.ToString();
+                v_TotalSmsQueued.Text = m_SMSEngine.m_SmsNos.Count().ToString();
+                v_TotalModems.Text = m_SMSEngine.ModemsCount().ToString();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
         }
 
         private void Button_Click_1(object sender, RoutedEventArgs e)
