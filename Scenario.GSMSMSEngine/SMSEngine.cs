@@ -313,7 +313,7 @@ namespace Scenario.GSMSMSEngine
             }
             catch (Exception ex)
             {
-                throw ex;
+                //throw ex;
             }
         }
         #endregion
@@ -368,7 +368,15 @@ namespace Scenario.GSMSMSEngine
         #region Send message Async
         async void SendMessage(SMSQueue obj, Modem comm, BackgroundWorker worker, DoWorkEventArgs e)
         {
-            await SendMessageAsync(obj, comm, worker, e);
+            try
+            {
+                await SendMessageAsync(obj, comm, worker, e);
+            }
+            catch (Exception ex)
+            {
+                message = comm.GsmCommMain.PortName + "-" + comm.TotalSmsSent + " IsFree=" + comm.IsFree + " Exception";
+                AddLog(EventLevel.Error.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
+            }
         }
         private Task SendMessageAsync(SMSQueue obj, Modem comm, BackgroundWorker worker, DoWorkEventArgs e)
         {
