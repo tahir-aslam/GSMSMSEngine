@@ -71,9 +71,9 @@ namespace Scenario.GSMSMSEngine
                 StartSMSEngine();
                 try
                 {
-                    //OpenOnlineConnectionAsync();
-                    ConOnline = miscDAL.OpenOnlineDatabaseConnection();
-                    m_IsOnlineConnectionOpen = true;
+                    OpenOnlineConnectionAsync();
+                    //ConOnline = miscDAL.OpenOnlineDatabaseConnection();                   
+                    //m_IsOnlineConnectionOpen = true;
                 }
                 catch (Exception ex)
                 {
@@ -105,7 +105,7 @@ namespace Scenario.GSMSMSEngine
         public void StartDataTimer()
         {
             refreshDataTimer = new DispatcherTimer();
-            refreshDataTimer.Interval = new TimeSpan(0, 0, 3);
+            refreshDataTimer.Interval = new TimeSpan(0, 0, 5);
             refreshDataTimer.Tick += refreshDataTimer_Tick;
             refreshDataTimer.Start();
         }
@@ -191,12 +191,12 @@ namespace Scenario.GSMSMSEngine
             }
             catch (Exception ex)
             {
-                message = portName + "Openining Port Exception: "+ex.Message;
+                message = portName + "Openining Port Exception: " + ex.Message;
                 AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
             }
             return comm;
         }
-        
+
         private void Comm_MessageSendStarting(object sender, MessageEventArgs e)
         {
             //throw new NotImplementedException();
@@ -213,12 +213,20 @@ namespace Scenario.GSMSMSEngine
         {
             GsmCommMain obj = sender as GsmCommMain;
             try
-            {                
+            {
                 message = obj.PortName + " Phone disconected";
                 AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
-
-                 //obj.Close();
                 Modems.Remove(Modems.Where(x => x.GsmCommMain.PortName == obj.PortName).First());
+            }
+            catch (Exception ex)
+            {
+                message = obj.PortName + " Comm_PhoneDisconnected() Exception: " + ex.Message;
+                AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+            }
+
+            try
+            {
+                obj.Close();
             }
             catch (Exception ex)
             {
@@ -227,10 +235,12 @@ namespace Scenario.GSMSMSEngine
             }
         }
         private void Comm_PhoneConnected(object sender, EventArgs e)
-        {            
+        {
             GsmCommMain obj = sender as GsmCommMain;
             message = obj.PortName + " Phone Connected";
             AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+
+            AddNewModems();
         }
         private void DisconnectEvents(Modem comm)
         {
@@ -279,6 +289,23 @@ namespace Scenario.GSMSMSEngine
                 throw ex;
             }
         }
+        public void CloseAndDisposeAllPorts()
+        {
+            try
+            {
+                foreach (var item in Modems)
+                {
+                    if (item.GsmCommMain.IsOpen())
+                    {
+                        item.GsmCommMain.Close();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
 
         #region Open Connection Async
         MySqlConnection OpenOnlineConnection()
@@ -290,19 +317,13 @@ namespace Scenario.GSMSMSEngine
             }
             catch (MySqlException ex)
             {
+                m_IsOnlineConnectionOpen = false;
                 throw ex;
             }
         }
         Task<MySqlConnection> OpenOnlineConnectionTask()
         {
-            try
-            {
-                return Task.Run(() => OpenOnlineConnection());
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
+            return Task.Run(() => OpenOnlineConnection());
         }
         async void OpenOnlineConnectionAsync()
         {
@@ -313,7 +334,9 @@ namespace Scenario.GSMSMSEngine
             }
             catch (Exception ex)
             {
-                //throw ex;
+                m_IsOnlineConnectionOpen = false;
+                message = "OpenOnlineConnectionAsync Exception: " + ex.Message;
+                AddLog(EventLevel.Error.ToString(), DateTime.Now, EventSource.OnlineConnection.ToString(), message);
             }
         }
         #endregion
@@ -359,7 +382,7 @@ namespace Scenario.GSMSMSEngine
             }
             catch (Exception ex)
             {
-                message = "Synchronization Exception: "+ex.Message;
+                message = "Synchronization Exception: " + ex.Message;
                 AddLog(EventLevel.Error.ToString(), DateTime.Now, EventSource.Synchronization.ToString(), message);
             }
         }
@@ -390,7 +413,7 @@ namespace Scenario.GSMSMSEngine
                 comm.IsFree = false;
                 UpdateModemStatus(comm);
 
-                message = comm.GsmCommMain.PortName + "-" + comm.TotalSmsSent + " IsFree="+ comm .IsFree+ " Start Sending Message";
+                message = comm.GsmCommMain.PortName + "-" + comm.TotalSmsSent + " IsFree=" + comm.IsFree + " Start Sending Message";
                 AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
 
                 i = 0;
@@ -409,7 +432,7 @@ namespace Scenario.GSMSMSEngine
                 {
                     try
                     {
-                        if (comm.GsmCommMain.IsConnected() && comm.GsmCommMain.IsOpen() && Modems.Count>0)
+                        if (comm.GsmCommMain.IsConnected() && comm.GsmCommMain.IsOpen() && Modems.Count > 0)
                         {
                             comm.GsmCommMain.SendMessage(pdu[j], true);
                             //comm.GsmCommMain.EnablePermanentSmsBatchMode();
@@ -491,6 +514,7 @@ namespace Scenario.GSMSMSEngine
                             try
                             {
                                 Thread.Sleep(1000);
+                                comm.GsmCommMain.Close();
                                 Modems.Remove(Modems.Where(x => x.GsmCommMain.PortName == comm.GsmCommMain.PortName).First());
                                 message = comm.GsmCommMain.PortName + " Removed";
                                 AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
@@ -498,7 +522,7 @@ namespace Scenario.GSMSMSEngine
                             }
                             catch (Exception exx)
                             {
-                                message = comm.GsmCommMain.PortName + " Removed Exception: "+exx.Message;
+                                message = comm.GsmCommMain.PortName + " Removed Exception: " + exx.Message;
                                 AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
                             }
                             Thread.Sleep(1000);
@@ -565,7 +589,8 @@ namespace Scenario.GSMSMSEngine
                     }
 
                 }
-            }catch(Exception ex)
+            }
+            catch (Exception ex)
             {
                 message = comm.GsmCommMain.PortName + "-" + comm.TotalSmsSent + " Exception:" + ex.Message;
                 AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
@@ -612,7 +637,7 @@ namespace Scenario.GSMSMSEngine
                                     //deep copy for selected item
                                     try
                                     {
-                                        Modem _selectedModem = SelectModem(SelectedComm);
+                                        Modem _selectedModem = SelectModem(SelectedComm).Result;
                                         if (_selectedModem != null)
                                         {
                                             SelectedComm = new Modem()
@@ -631,7 +656,7 @@ namespace Scenario.GSMSMSEngine
                                         message = "Selected Modem = Null ";
                                         AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.bw_DoWork.ToString(), message);
                                     }
-                                    
+
                                 }
                                 m_SmsNos = miscDAL.GetSMSQueue(ConLocal);
                             }
@@ -658,7 +683,7 @@ namespace Scenario.GSMSMSEngine
             }
             catch (Exception ex)
             {
-                message = "Backgound Worker Exception: "+ex.Message;
+                message = "Backgound Worker Exception: " + ex.Message;
                 AddLog(EventLevel.Error.ToString(), DateTime.Now, EventSource.bw_DoWork.ToString(), message);
             }
         }
@@ -692,6 +717,9 @@ namespace Scenario.GSMSMSEngine
 
             foreach (var portName in SerialPort.GetPortNames())
             {
+                SerialPort port = new SerialPort();
+
+
                 //if (portName == "COM22" || portName == "COM23" || portName == "COM24" || portName == "COM25" || portName == "COM26" || portName == "COM27" || portName == "COM28")
                 //{
                 try
@@ -711,7 +739,7 @@ namespace Scenario.GSMSMSEngine
                             AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
                         }
                         else
-                        {                            
+                        {
                             message = portName + " Is not connected";
                             AddLog(EventLevel.Error.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
                         }
@@ -735,15 +763,15 @@ namespace Scenario.GSMSMSEngine
                 message = "No Port Found SerialPort.GetPortNames()";
                 AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
             }
-            
+
         }
-        Modem SelectModem(Modem SelectedComm)
+        async Task<Modem> SelectModem(Modem SelectedComm)
         {
             try
             {
                 do
                 {
-                    AddNewModems(); //if new exists
+                    //AddNewModems(); //if new exists
                     int totalModems = Modems.Count;
                     if (Modems.Count > 0)
                     {
@@ -817,20 +845,21 @@ namespace Scenario.GSMSMSEngine
                                 AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.SelectModem.ToString(), message);
                             }
                         }
-                        Thread.Sleep(500);
                     }
                     else
                     {
                         // if no modem exists
-                        message = "Modems Count="+Modems.Count;
+                        message = "Modems Count=" + Modems.Count;
                         AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.SelectModem.ToString(), message);
                     }
+                    await Task.Delay(500);
+                    //Thread.Sleep(500);
                 }
                 while (true);
             }
             catch (Exception ex)
             {
-                message = "Select Modem Exception: "+ex.Message;
+                message = "Select Modem Exception: " + ex.Message;
                 AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.SelectModem.ToString(), message);
                 throw ex;
             }

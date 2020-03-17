@@ -33,6 +33,7 @@ namespace Scenario.GSMSMSEngine.Model
         Stopping,
         Thread,
         SendMessage,
-        Synchronization
+        Synchronization,
+        OnlineConnection
     }
 }
