@@ -195,7 +195,7 @@ namespace Scenario.GSMSMSEngine.DAL
                     {
                         using (MySqlCommand cmd = new MySqlCommand())
                         {
-                            cmd.CommandText = "Update sms_sms_queue SET is_sent='Y', updated_date_time=@updated_date_time, sender_com_port=@sender_com_port, sender_cell_no=@sender_cell_no, sms_length=@sms_length, downloaded_date_time=@downloaded_date_time where id=@id";
+                            cmd.CommandText = "Update sms_sms_queue SET is_sent='Y', updated_date_time=@updated_date_time, sender_com_port=@sender_com_port, sender_cell_no=@sender_cell_no, sms_length=@sms_length, downloaded_date_time=@downloaded_date_time, isSynchronized=@isSynchronized where id=@id";
                             cmd.Connection = conOnline;
 
                             cmd.Parameters.Add("@id", MySqlDbType.Int32).Value = obj.id;
@@ -204,6 +204,7 @@ namespace Scenario.GSMSMSEngine.DAL
                             cmd.Parameters.Add("@sender_com_port", MySqlDbType.VarChar).Value = obj.sender_com_port;
                             cmd.Parameters.Add("@sender_cell_no", MySqlDbType.VarChar).Value = obj.sender_cell_no;
                             cmd.Parameters.Add("@sms_length", MySqlDbType.Int32).Value = obj.sms_length;
+                            cmd.Parameters.Add("@isSynchronized", MySqlDbType.Int32).Value = obj.isSynchronized;
 
                             result = Convert.ToInt32(cmd.ExecuteNonQuery());
                             cmd.Parameters.Clear();
