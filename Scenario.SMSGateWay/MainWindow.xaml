@@ -9,7 +9,8 @@
         Height="700"
         Width="800"
         WindowState="Maximized"
-        Closed="Window_Closed">
+        Closed="Window_Closed"
+        Loaded="Window_Loaded">
     <Grid>
         <TabControl DockPanel.Dock="Bottom"
                     TabStripPlacement="Bottom"
@@ -54,13 +55,13 @@
                             <Button Margin="0,100,0,0"
                                     Click="Button_Click">Start SMS Engine</Button>
                             <Button Margin="0,10,0,0"
-                                    Click="Button_Click_1">Stop SMS Engine</Button>
+                                    Click="Button_Click_1">Close</Button>
                             <Button Margin="0,10,0,0"
                                     Name="DisablePorts"
                                     Click="DisablePorts_Click">Stop SMS Engine</Button>
                             <Button Margin="0,10,0,0"
-                                    Name="EnablePorts"
-                                    Click="EnablePorts_Click">
+                                    Name="RestartApplication"
+                                    Click="RestartApplication_Click">
                                 Restart Applic  ation
                             </Button>
                             <Button Margin="0,10,0,0"

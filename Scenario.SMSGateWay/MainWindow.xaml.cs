@@ -31,11 +31,16 @@ namespace Scenario.SMSGateWay
     {
         SMSEngine m_SMSEngine;
         DispatcherTimer refreshDataTimer;
+        bool m_IsRestartEnabled = true;
+        bool m_IsRefreshDataTimerEnabled = true;
 
         public MainWindow()
         {
             InitializeComponent();
+            Thread.Sleep(1000);
+            StartSMSEngine();
             //LoadModems();
+            Console.WriteLine("MainWindow() Constructor");
         }
 
         void LoadModems()
@@ -90,15 +95,27 @@ namespace Scenario.SMSGateWay
             }
         }
 
+        void StartSMSEngine()
+        {
+            try
+            {
+                Thread.Sleep(2000);
+                m_SMSEngine = new SMSEngine();
+                //v_log_datagrid.ItemsSource = m_SMSEngine.m_ApplicationLogsList.OrderByDescending(x=>x.CreatedDateTime);
+                this.DataContext = m_SMSEngine;                
+                v_MessageBox.Text = "Started";
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }            
+        }
+
         private void Button_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                m_SMSEngine = new SMSEngine();
-                //v_log_datagrid.ItemsSource = m_SMSEngine.m_ApplicationLogsList.OrderByDescending(x=>x.CreatedDateTime);
-                this.DataContext = m_SMSEngine;
-                StartRefreshTimer();
-                v_MessageBox.Text = "Started";
+                //StartSMSEngine();
             }
             catch (Exception ex)
             {
@@ -116,15 +133,30 @@ namespace Scenario.SMSGateWay
 
         void refreshDataTimer_Tick(object sender, EventArgs e)
         {
-            try
+            if (m_IsRefreshDataTimerEnabled)
             {
-                v_TotalSmsSent.Text = m_SMSEngine.m_TotalSmsSent.ToString();
-                v_TotalSmsQueued.Text = m_SMSEngine.m_SmsNos.Count().ToString();
-                v_TotalModems.Text = m_SMSEngine.ModemsCount().ToString();
-            }
-            catch (Exception ex)
-            {
-                System.Windows.MessageBox.Show(ex.Message);
+                try
+                {
+                    m_IsRefreshDataTimerEnabled = false;
+                    v_TotalSmsSent.Text = m_SMSEngine.m_TotalSmsSent.ToString();
+                    v_TotalSmsQueued.Text = m_SMSEngine.m_SmsNos.Count().ToString();
+                    v_TotalModems.Text = m_SMSEngine.ModemsCount().ToString();
+
+                    if (m_SMSEngine.m_IsWindowCloseEnabled)
+                    {
+                        m_SMSEngine.m_IsWindowCloseEnabled = false;
+                        m_IsRestartEnabled = false;
+                        Restart();
+                    }                    
+                }
+                catch (Exception ex)
+                {                    
+                    System.Windows.MessageBox.Show(ex.Message);
+                }
+                finally
+                {
+                    m_IsRefreshDataTimerEnabled = true;
+                }
             }
         }
 
@@ -132,11 +164,21 @@ namespace Scenario.SMSGateWay
         {
             try
             {
-                m_SMSEngine.StopSMSEnging();
+                m_IsRestartEnabled = false;
+                try
+                {
+                    m_SMSEngine.StopSMSEnging();
+                    m_SMSEngine = null;
+                }
+                catch (Exception ex)
+                {
+                }
                 v_MessageBox.Text = "Stopped";
+                this.Close();
             }
             catch (Exception ex)
             {
+                m_SMSEngine = null;
                 System.Windows.MessageBox.Show(ex.Message);
             }
         }
@@ -145,38 +187,73 @@ namespace Scenario.SMSGateWay
         {
             Microsoft.Win32.Registry.SetValue(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\USBSTOR", "Start", 4, Microsoft.Win32.RegistryValueKind.DWord);
         }
-
-        private void EnablePorts_Click(object sender, RoutedEventArgs e)
+        
+        private void RestartApplication_Click(object sender, RoutedEventArgs e)
         {
-            Restart();
+            try
+            {
+                Restart();
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show(ex.Message);
+            }
         }
 
         void Restart()
         {
             try
             {
-                m_SMSEngine.CloseAndDisposeAllPorts();
+                m_IsRestartEnabled = false;
+                m_IsRefreshDataTimerEnabled = false;
+                refreshDataTimer.Stop();
+                refreshDataTimer = null;
+                m_SMSEngine.StopSMSEnging();
+                v_MessageBox.Text = "Stopped";
             }
             catch (Exception ex)
-            {
+            {                
                 //System.Windows.MessageBox.Show(ex.Message);
             }
             finally
             {
-                //restart applic\ation
+                m_SMSEngine = null;
+                //restart applic\ation                
                 System.Diagnostics.Process.Start(System.Windows.Application.ResourceAssembly.Location);
                 System.Windows.Application.Current.Shutdown();
+                //this.Close();
+                //MainWindow window = new MainWindow();
+                //window.Show();
+                //StartSMSEngine();
+                Console.WriteLine("Restart Finished");
             }
-        }     
+        }
 
         private void Window_Closed(object sender, EventArgs e)
         {
-            Restart();
+            try
+            {
+                Restart();
+            }
+            catch (Exception ex)
+            {
+                System.Windows.MessageBox.Show(ex.Message);
+            }
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            Restart();
+            if (m_IsRestartEnabled)
+            {
+                try
+                {
+                    Restart();
+                }
+                catch (Exception ex)
+                {
+                    System.Windows.MessageBox.Show(ex.Message);
+                }
+            }
         }
 
         #region sleep and awake
@@ -227,5 +304,21 @@ namespace Scenario.SMSGateWay
             Console.ReadLine();
         }
         #endregion
+
+        private void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                StartRefreshTimer();
+            }
+            catch (Exception ex)
+            {
+
+            }
+            finally
+            {
+                Console.WriteLine("Window_Loaded()");
+            }
+        }
     }
 }

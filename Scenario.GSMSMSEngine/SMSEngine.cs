@@ -42,6 +42,8 @@ namespace Scenario.GSMSMSEngine
         public bool m_IsEncoded = false;
         private bool m_IsSynchronize = true;
         private bool m_IsOnlineConnectionOpen;
+        public bool m_IsWindowCloseEnabled = false;
+        private int m_TryCount = 0;
         public List<SMSQueue> m_SmsNos = new List<SMSQueue>();
         public List<Modem> Modems;
         //Modem SelectedComm;
@@ -158,9 +160,6 @@ namespace Scenario.GSMSMSEngine
         {
             try
             {
-
-                AddNewModems();
-
                 bw = new BackgroundWorker();
                 bw.WorkerReportsProgress = true;
                 bw.WorkerSupportsCancellation = true;
@@ -196,7 +195,6 @@ namespace Scenario.GSMSMSEngine
             }
             return comm;
         }
-
         private void Comm_MessageSendStarting(object sender, MessageEventArgs e)
         {
             //throw new NotImplementedException();
@@ -271,7 +269,7 @@ namespace Scenario.GSMSMSEngine
                     message = "Stoping SMS Engine Execption: " + ex.Message;
                     AddLog(EventLevel.Error.ToString(), DateTime.Now, EventSource.Stopping.ToString(), message);
 
-                    throw ex;
+                    //throw ex;
                 }
             }
         }
@@ -306,6 +304,38 @@ namespace Scenario.GSMSMSEngine
                 throw ex;
             }
         }
+        void CloseWindow()
+        {
+            try
+            {
+                if (m_IsWindowCloseEnabled == false)
+                {
+                    if (Modems.Count == 0)
+                    {
+                        // close parent window
+                        m_IsWindowCloseEnabled = true;
+                        if (bw.WorkerSupportsCancellation == true)
+                        {
+                            bw.CancelAsync();
+                        }
+                        //foreach (Window window in Application.Current.Windows)
+                        //{
+                        //    if (window.Title == "MainWindow")
+                        //    {
+                        //        m_IsWindowCloseEnabled = false;
+                        //        window.Close();
+                        //        break;
+                        //    }
+                        //}
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                message = "Window Close Exception: "+ex.Message;
+                AddLog(EventLevel.Error.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
+            }
+        }
 
         #region Open Connection Async
         MySqlConnection OpenOnlineConnection()
@@ -313,17 +343,21 @@ namespace Scenario.GSMSMSEngine
             try
             {
                 return miscDAL.OpenOnlineDatabaseConnection();
-
             }
-            catch (MySqlException ex)
+            catch (Exception ex)
             {
-                m_IsOnlineConnectionOpen = false;
                 throw ex;
             }
         }
         Task<MySqlConnection> OpenOnlineConnectionTask()
         {
-            return Task.Run(() => OpenOnlineConnection());
+            try {
+                return Task.Run(() => OpenOnlineConnection());
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
         }
         async void OpenOnlineConnectionAsync()
         {
@@ -484,6 +518,25 @@ namespace Scenario.GSMSMSEngine
                     {
                         if (ex.Message.Contains("Message service error 500 occurred."))
                         {
+                            try
+                            {
+                                Thread.Sleep(1000);
+                                comm.GsmCommMain.Close();
+                                Modems.Remove(Modems.Where(x => x.GsmCommMain.PortName == comm.GsmCommMain.PortName).First());
+                                message = comm.GsmCommMain.PortName + " Removed";
+                                AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
+
+                            }
+                            catch (Exception exx)
+                            {
+                                message = comm.GsmCommMain.PortName + " Removed Exception: " + exx.Message;
+                                AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
+                            }
+                            finally
+                            {
+                                CloseWindow();
+                            }
+                            Thread.Sleep(1000);
                         }
                         //Access is denied.
                         else if (ex.Message.Contains("Access is denied."))
@@ -525,22 +578,11 @@ namespace Scenario.GSMSMSEngine
                                 message = comm.GsmCommMain.PortName + " Removed Exception: " + exx.Message;
                                 AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
                             }
-                            Thread.Sleep(1000);
-                            //if (!comm.GsmCommMain.IsOpen())
-                            //{
-                            //    try
-                            //    {
-                            //        OpenPort(comm.GsmCommMain.PortName);
-                            //        Thread.Sleep(1000);
-                            //        comm.IsFree = true;
-                            //        UpdateModemStatus(comm);
-                            //    }
-                            //    catch (Exception exx)
-                            //    {
-                            //        comm.IsFree = false;
-                            //        UpdateModemStatus(comm);
-                            //    }
-                            //}
+                            finally
+                            {
+                                CloseWindow();
+                            }
+                            Thread.Sleep(1000);                           
                         }
                         else
                         {
@@ -603,12 +645,23 @@ namespace Scenario.GSMSMSEngine
         {
             try
             {
+                try
+                {
+                    AddNewModems();
+                }
+                catch (Exception ex)
+                {
+                    message = "Background worker started, ADD Modems Count= " + Modems.Count + " Exception: " + ex.Message;
+                    AddLog(EventLevel.Error.ToString(), DateTime.Now, EventSource.bw_DoWork.ToString(), message);
+                }
+                m_TryCount = 0;
                 BackgroundWorker worker = sender as BackgroundWorker;
                 do
                 {
                     Modem SelectedComm;
                     if (Modems.Count > 0)
                     {
+                        m_TryCount = 0;
                         message = "Background worker started, Modems Count= " + Modems.Count;
                         AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.bw_DoWork.ToString(), message);
 
@@ -673,10 +726,15 @@ namespace Scenario.GSMSMSEngine
                     }
                     else
                     {
+                        m_TryCount++;
                         AddNewModems();
                         message = " Modems Count= " + Modems.Count;
                         AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.bw_DoWork.ToString(), message);
-                        Thread.Sleep(1000);
+                        Thread.Sleep(2000);
+                        if (m_TryCount > 10)
+                        {
+                            CloseWindow();
+                        }
                     }
                 }
                 while (Modems.Count == 0);
