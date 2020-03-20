@@ -832,7 +832,7 @@ namespace Scenario.GSMSMSEngine
             {
                 do
                 {
-                    //AddNewModems(); //if new exists
+                    AddNewModems(); //if new exists
                     int totalModems = Modems.Count;
                     if (Modems.Count > 0)
                     {
