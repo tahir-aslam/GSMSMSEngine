@@ -714,6 +714,7 @@ namespace Scenario.GSMSMSEngine
                                 m_SmsNos = miscDAL.GetSMSQueue(ConLocal);
                                 message = "Queue Count="+m_SmsNos.Count;
                                 AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.bw_DoWork.ToString(), message);
+                                Thread.Sleep(1000);
                             }
                             while (true);
                         }
