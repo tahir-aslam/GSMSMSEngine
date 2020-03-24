@@ -204,7 +204,7 @@ namespace Scenario.GSMSMSEngine.DAL
                             cmd.Parameters.Add("@sender_com_port", MySqlDbType.VarChar).Value = obj.sender_com_port;
                             cmd.Parameters.Add("@sender_cell_no", MySqlDbType.VarChar).Value = obj.sender_cell_no;
                             cmd.Parameters.Add("@sms_length", MySqlDbType.Int32).Value = obj.sms_length;
-                            cmd.Parameters.Add("@isSynchronized", MySqlDbType.Int32).Value = obj.isSynchronized;
+                            cmd.Parameters.Add("@isSynchronized", MySqlDbType.Int32).Value = 1;
 
                             result = Convert.ToInt32(cmd.ExecuteNonQuery());
                             cmd.Parameters.Clear();
@@ -474,6 +474,33 @@ namespace Scenario.GSMSMSEngine.DAL
                 throw ex;
             }
             return i;
+        }
+
+        // Total sms sent 
+        public Int32 GetTotalSmsSent(MySqlConnection con, DateTime sDate, DateTime eDate)
+        {
+            int count = 0;
+            try
+            {
+                using (MySqlCommand cmd = new MySqlCommand())
+                {
+                    cmd.Connection = con;
+                    cmd.CommandText = "SELECT COUNT(*) FROM sms_sms_queue AS q WHERE q.is_sent='Y' && (Date(q.updated_date_time)>=@sDate && Date(q.updated_date_time)<=@eDate)";
+                    cmd.Parameters.Add("@sDate", MySqlDbType.Date).Value=sDate;
+                    cmd.Parameters.Add("@eDate", MySqlDbType.Date).Value = eDate;
+
+                    MySqlDataReader reader = cmd.ExecuteReader();
+                    SMSQueue obj;
+                    reader.Read();
+                    count = Convert.ToInt32(reader[0]); 
+                    reader.Close();
+                };
+            }
+            catch (MySqlException ex)
+            {
+                throw ex;
+            }
+            return count;
         }
 
     }

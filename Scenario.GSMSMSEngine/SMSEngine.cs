@@ -48,6 +48,7 @@ namespace Scenario.GSMSMSEngine
         public List<Modem> Modems;
         //Modem SelectedComm;
         public int m_TotalSmsSent = 0;
+        public Int32 m_TotalSmsSentMonthly = 0;
         private ObservableCollection<ApplicationLog> _applicationLogsList;
         ApplicationLog applicationLog;
         private static object _syncLock = new object();
@@ -332,7 +333,7 @@ namespace Scenario.GSMSMSEngine
             }
             catch (Exception ex)
             {
-                message = "Window Close Exception: "+ex.Message;
+                message = "Window Close Exception: " + ex.Message;
                 AddLog(EventLevel.Error.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
             }
         }
@@ -351,7 +352,8 @@ namespace Scenario.GSMSMSEngine
         }
         Task<MySqlConnection> OpenOnlineConnectionTask()
         {
-            try {
+            try
+            {
                 return Task.Run(() => OpenOnlineConnection());
             }
             catch (Exception ex)
@@ -391,10 +393,16 @@ namespace Scenario.GSMSMSEngine
                 }
                 else
                 {
-                    message = "Synchronization completed with not record updated";
+                    message = "Synchronization completed with no record updated";
                     AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.Synchronization.ToString(), message);
                 }
                 m_IsSynchronize = true;
+
+                //Total sms sent
+                DateTime sDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 01); //First of every month
+                m_TotalSmsSentMonthly = miscDAL.GetTotalSmsSent(ConOnline, sDate, DateTime.Now);
+                message = "Total SMS Sent Monthly="+m_TotalSmsSentMonthly;
+                AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.Synchronization.ToString(), message);
             }
         }
         Task SynchronizeDataTask()
@@ -582,7 +590,7 @@ namespace Scenario.GSMSMSEngine
                             {
                                 CloseWindow();
                             }
-                            Thread.Sleep(1000);                           
+                            Thread.Sleep(1000);
                         }
                         else
                         {
@@ -712,7 +720,7 @@ namespace Scenario.GSMSMSEngine
 
                                 }
                                 m_SmsNos = miscDAL.GetSMSQueue(ConLocal);
-                                message = "Queue Count="+m_SmsNos.Count;
+                                message = "Queue Count=" + m_SmsNos.Count;
                                 AddLog(EventLevel.Information.ToString(), DateTime.Now, EventSource.bw_DoWork.ToString(), message);
                                 Thread.Sleep(1000);
                             }

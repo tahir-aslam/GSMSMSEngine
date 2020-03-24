@@ -141,6 +141,7 @@ namespace Scenario.SMSGateWay
                     v_TotalSmsSent.Text = m_SMSEngine.m_TotalSmsSent.ToString();
                     v_TotalSmsQueued.Text = m_SMSEngine.m_SmsNos.Count().ToString();
                     v_TotalModems.Text = m_SMSEngine.ModemsCount().ToString();
+                    v_TotalSmsSentMonthly.Text = m_SMSEngine.m_TotalSmsSentMonthly.ToString();
 
                     if (m_SMSEngine.m_IsWindowCloseEnabled)
                     {
@@ -150,7 +151,7 @@ namespace Scenario.SMSGateWay
                     }                    
                 }
                 catch (Exception ex)
-                {                    
+                { 
                     System.Windows.MessageBox.Show(ex.Message);
                 }
                 finally

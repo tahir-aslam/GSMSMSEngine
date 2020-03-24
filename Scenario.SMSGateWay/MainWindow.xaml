@@ -11,6 +11,28 @@
         WindowState="Maximized"
         Closed="Window_Closed"
         Loaded="Window_Loaded">
+    <Window.Resources>
+        <Style x:Key="StackpanelStyle"
+               TargetType="Grid">
+            <Setter Property="Height"
+                    Value="150" />
+            <Setter Property="Width"
+                    Value="150" />
+            <Setter Property="Margin"
+                    Value="10" />
+        </Style>
+        <Style x:Key="TextBlockStyle"
+               TargetType="TextBlock">
+            <Setter Property="FontFamily"
+                    Value="Segoe UI Light" />
+            <Setter Property="TextWrapping"
+                    Value="Wrap" />
+            <Setter Property="Margin"
+                    Value="5" />
+            <Setter Property="HorizontalAlignment"
+                    Value="Center" />
+        </Style>
+    </Window.Resources>
     <Grid>
         <TabControl DockPanel.Dock="Bottom"
                     TabStripPlacement="Bottom"
@@ -24,13 +46,35 @@
                     </Grid.ColumnDefinitions>
                     <Grid Grid.Column="0">
                         <StackPanel HorizontalAlignment="Center">
-                            <TextBlock Text="Total Sent"
-                                       FontSize="20" />
-                            <TextBlock Text="000"
-                                       FontSize="25"
-                                       Name="v_TotalSmsSent"
-                                       Foreground="Green" />
-
+                            <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Center">
+                            <Grid Background="Orange"
+                                        Style="{StaticResource StackpanelStyle}">
+                                <TextBlock Text="Total Sent"
+                                           FontSize="20" 
+                                           Style="{StaticResource TextBlockStyle}"/>
+                                <TextBlock Text="000"
+                                           FontSize="30"
+                                           Name="v_TotalSmsSent"
+                                           Foreground="Green" 
+                                           VerticalAlignment="Bottom"
+                                               Style="{StaticResource TextBlockStyle}" />
+                            </Grid>
+                            <Grid Background="Orange"
+                                            Style="{StaticResource StackpanelStyle}"
+                                            Margin="10,0,0,0">
+                                <TextBlock Text="Total Sent Monthly"
+                                           FontSize="20"
+                                               Style="{StaticResource TextBlockStyle}" />
+                                <TextBlock Text="000"
+                                           FontSize="30"
+                                           Name="v_TotalSmsSentMonthly"
+                                           Foreground="Green"
+                                           VerticalAlignment="Bottom"
+                                               Style="{StaticResource TextBlockStyle}" />
+                            </Grid>
+                        </StackPanel>
+                        
                             <TextBlock Text="Queue"
                                        Margin="0,50,0,0"
                                        FontSize="20" />
