@@ -53,7 +53,13 @@ namespace Scenario.GSMSMSEngine
         ApplicationLog applicationLog;
         private static object _syncLock = new object();
         string message;
+        public ObservableCollection<ApplicationLog> ApplicationLogsList
+        {
+            get { return _applicationLogsList; }
+            set { _applicationLogsList = value; }
+        }
 
+        #region Constructor
         public SMSEngine()
         {
             miscDAL = new DAL.MiscDAL();
@@ -96,15 +102,10 @@ namespace Scenario.GSMSMSEngine
 
 
         }
-        public ObservableCollection<ApplicationLog> ApplicationLogsList
-        {
-            get { return _applicationLogsList; }
-            set { _applicationLogsList = value; }
-        }
-        #region Send SMS
+        #endregion
 
+        #region DataSynchronize Timer
         static AutoResetEvent readNow = new AutoResetEvent(false);
-
         public void StartDataTimer()
         {
             refreshDataTimer = new DispatcherTimer();
@@ -174,6 +175,9 @@ namespace Scenario.GSMSMSEngine
                 MessageBox.Show(ex.Message);
             }
         }
+        #endregion        
+
+        #region Open/Close ports
         public GsmCommMain OpenPort(string portName)
         {
             GsmCommMain comm = new GsmCommMain(portName, 115200, 300);
@@ -196,58 +200,6 @@ namespace Scenario.GSMSMSEngine
             }
             return comm;
         }
-        private void Comm_MessageSendStarting(object sender, MessageEventArgs e)
-        {
-            //throw new NotImplementedException();
-        }
-        private void Comm_MessageSendFailed(object sender, MessageErrorEventArgs e)
-        {
-            //throw new NotImplementedException();
-        }
-        private void Comm_MessageSendComplete(object sender, MessageEventArgs e)
-        {
-            //throw new NotImplementedException();
-        }
-        private void Comm_PhoneDisconnected(object sender, EventArgs e)
-        {
-            GsmCommMain obj = sender as GsmCommMain;
-            try
-            {
-                message = obj.PortName + " Phone disconected";
-                AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
-                Modems.Remove(Modems.Where(x => x.GsmCommMain.PortName == obj.PortName).First());
-            }
-            catch (Exception ex)
-            {
-                message = obj.PortName + " Comm_PhoneDisconnected() Exception: " + ex.Message;
-                AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
-            }
-
-            try
-            {
-                obj.Close();
-            }
-            catch (Exception ex)
-            {
-                message = obj.PortName + " Comm_PhoneDisconnected() Exception: " + ex.Message;
-                AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
-            }
-        }
-        private void Comm_PhoneConnected(object sender, EventArgs e)
-        {
-            GsmCommMain obj = sender as GsmCommMain;
-            message = obj.PortName + " Phone Connected";
-            AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
-
-            AddNewModems();
-        }
-        private void DisconnectEvents(Modem comm)
-        {
-            comm.GsmCommMain.MessageSendStarting -= new GsmCommMain.MessageEventHandler(this.Comm_MessageSendStarting);
-            comm.GsmCommMain.MessageSendComplete -= new GsmCommMain.MessageEventHandler(this.Comm_MessageSendComplete);
-            comm.GsmCommMain.MessageSendFailed -= new GsmCommMain.MessageErrorEventHandler(this.Comm_MessageSendFailed);
-        }
-
         public void StopSMSEnging()
         {
             message = "Stoping SMS Engine";
@@ -338,6 +290,62 @@ namespace Scenario.GSMSMSEngine
             }
         }
 
+        #endregion
+
+        #region Meesage/Phone Events
+        private void Comm_MessageSendStarting(object sender, MessageEventArgs e)
+        {
+            //throw new NotImplementedException();
+        }
+        private void Comm_MessageSendFailed(object sender, MessageErrorEventArgs e)
+        {
+            //throw new NotImplementedException();
+        }
+        private void Comm_MessageSendComplete(object sender, MessageEventArgs e)
+        {
+            //throw new NotImplementedException();
+        }
+        private void Comm_PhoneDisconnected(object sender, EventArgs e)
+        {
+            GsmCommMain obj = sender as GsmCommMain;
+            try
+            {
+                message = obj.PortName + " Phone disconected";
+                AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+                Modems.Remove(Modems.Where(x => x.GsmCommMain.PortName == obj.PortName).First());
+            }
+            catch (Exception ex)
+            {
+                message = obj.PortName + " Comm_PhoneDisconnected() Exception: " + ex.Message;
+                AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+            }
+
+            try
+            {
+                obj.Close();
+            }
+            catch (Exception ex)
+            {
+                message = obj.PortName + " Comm_PhoneDisconnected() Exception: " + ex.Message;
+                AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+            }
+        }
+        private void Comm_PhoneConnected(object sender, EventArgs e)
+        {
+            GsmCommMain obj = sender as GsmCommMain;
+            message = obj.PortName + " Phone Connected";
+            AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.AddModem.ToString(), message);
+
+            AddNewModems();
+        }
+        private void DisconnectEvents(Modem comm)
+        {
+            comm.GsmCommMain.MessageSendStarting -= new GsmCommMain.MessageEventHandler(this.Comm_MessageSendStarting);
+            comm.GsmCommMain.MessageSendComplete -= new GsmCommMain.MessageEventHandler(this.Comm_MessageSendComplete);
+            comm.GsmCommMain.MessageSendFailed -= new GsmCommMain.MessageErrorEventHandler(this.Comm_MessageSendFailed);
+        }
+        #endregion
+
         #region Open Connection Async
         MySqlConnection OpenOnlineConnection()
         {
@@ -354,7 +362,7 @@ namespace Scenario.GSMSMSEngine
         {
             try
             {
-                return Task.Run(() => OpenOnlineConnection());
+                return Task.Run(() => miscDAL.OpenOnlineDatabaseConnection());
             }
             catch (Exception ex)
             {
@@ -451,6 +459,7 @@ namespace Scenario.GSMSMSEngine
         {
             try
             {
+                obj.sms_message = ValidateMessage(obj.sms_message);
                 bool isSend = false;
                 comm.IsFree = false;
                 UpdateModemStatus(comm);
@@ -592,6 +601,24 @@ namespace Scenario.GSMSMSEngine
                             }
                             Thread.Sleep(1000);
                         }
+                        else if (ex.Message.Contains("The character"))
+                        {
+                            //The character '' at position 10 does not exist in the GSM 7-bit default alphabet.
+                            try
+                            {
+                                Thread.Sleep(1000);
+                                comm.IsFree=true;
+                                UpdateModemStatus(comm);
+                                message = comm.GsmCommMain.PortName + " Invalid Character: " + ex.Message;
+                                AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
+                            }
+                            catch (Exception exm)
+                            {
+                            }
+                            finally
+                            {
+                            }
+                        }
                         else
                         {
                             comm.IsFree = false;
@@ -642,9 +669,188 @@ namespace Scenario.GSMSMSEngine
             }
             catch (Exception ex)
             {
-                message = comm.GsmCommMain.PortName + "-" + comm.TotalSmsSent + " Exception:" + ex.Message;
-                AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
+                if (ex.Message.Contains("The character"))
+                {
+                    //The character '' at position 10 does not exist in the GSM 7-bit default alphabet.
+                    try
+                    {
+                        Thread.Sleep(1000);
+                        comm.IsFree = true;
+                        UpdateModemStatus(comm);
+                        message = comm.GsmCommMain.PortName + " Invalid Character: " + ex.Message;
+                        AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
+                    }
+                    catch (Exception exm)
+                    {
+                    }
+                    finally
+                    {
+                    }
+                }
+                else
+                {
+                    message = comm.GsmCommMain.PortName + "-" + comm.TotalSmsSent + " Exception:" + ex.Message;
+                    AddLog(EventLevel.Warning.ToString(), DateTime.Now, EventSource.SendMessage.ToString(), message);
+                }
             }
+        }
+        /// <summary>
+        /// Creates a concatenated text message.
+        /// </summary>
+        /// <param name="userDataText">The message text.</param>
+        /// <param name="unicode">Specifies if the userDataText is to be encoded as Unicode. If not, the GSM 7-bit default alphabet is used.</param>
+        /// <param name="destinationAddress">The message's destination address.</param>
+        /// <returns>A set of <see cref="T:GsmComm.PduConverter.SmsSubmitPdu" /> objects that represent the message.</returns>
+        /// <remarks>
+        /// <para>A concatenated message makes it possible to exceed the maximum length of a normal message,
+        /// created by splitting the message data into multiple parts.</para>
+        /// <para>Concatenated messages are also known as long or multi-part messages.</para>
+        /// <para>If no concatenation is necessary, a single, non-concatenated <see cref="T:GsmComm.PduConverter.SmsSubmitPdu" /> object is created.</para>
+        /// </remarks>
+        /// <exception cref="T:System.ArgumentException"><para>userDataText is so long that it would create more than 255 message parts.</para></exception>
+        public static SmsSubmitPdu[] CreateConcatTextMessage(string userDataText, bool unicode, string destinationAddress)
+        {
+            string str;
+            int length = 0;
+            int num;
+            byte[] bytes;
+            SmsSubmitPdu smsSubmitPdu;
+            int num1;
+            byte num2;
+            if (unicode)
+            {
+                num1 = 70;
+            }
+            else
+            {
+                num1 = 160;
+            }
+            int num3 = num1;
+            if (unicode)
+            {
+                str = userDataText;
+            }
+            else
+            {
+                str = TextDataConverter.StringTo7Bit(userDataText);
+            }
+            if (str.Length <= num3)
+            {
+                if (unicode)
+                {
+                    smsSubmitPdu = new SmsSubmitPdu(userDataText, destinationAddress, 8);
+                }
+                else
+                {
+                    smsSubmitPdu = new SmsSubmitPdu(userDataText, destinationAddress);
+                }
+                SmsSubmitPdu[] smsSubmitPduArray = new SmsSubmitPdu[1];
+                smsSubmitPduArray[0] = smsSubmitPdu;
+                return smsSubmitPduArray;
+            }
+            else
+            {
+                ConcatMessageElement16 concatMessageElement16 = new ConcatMessageElement16(0, 0, 0);
+                byte length1 = (byte)((int)SmartMessageFactory.CreateUserDataHeader(concatMessageElement16).Length);
+                byte num4 = (byte)((double)length1 / 7 * 8);
+                if (unicode)
+                {
+                    num2 = length1;
+                }
+                else
+                {
+                    num2 = num4;
+                }
+                byte num5 = num2;
+                StringCollection stringCollections = new StringCollection();
+                for (int i = 0; i < str.Length; i = i + length)
+                {
+                    if (!unicode)
+                    {
+                        if (str.Length - i < num3 - num5)
+                        {
+                            length = str.Length - i;
+                        }
+                        else
+                        {
+                            length = num3 - num5;
+                        }
+                    }
+                    else
+                    {
+                        if (str.Length - i < (num3 * 2 - num5) / 2)
+                        {
+                            length = str.Length - i;
+                        }
+                        else
+                        {
+                            length = (num3 * 2 - num5) / 2;
+                        }
+                    }
+                    string str1 = str.Substring(i, length);
+                    stringCollections.Add(str1);
+                }
+                if (stringCollections.Count <= 255)
+                {
+                    SmsSubmitPdu[] smsSubmitPduArray1 = new SmsSubmitPdu[stringCollections.Count];
+                    ushort num6 = CalcNextRefNumber();
+                    byte num7 = 0;
+                    for (int j = 0; j < stringCollections.Count; j++)
+                    {
+                        num7 = (byte)(num7 + 1);
+                        ConcatMessageElement16 concatMessageElement161 = new ConcatMessageElement16(num6, (byte)stringCollections.Count, num7);
+                        byte[] numArray = SmartMessageFactory.CreateUserDataHeader(concatMessageElement161);
+                        if (unicode)
+                        {
+                            Encoding bigEndianUnicode = Encoding.BigEndianUnicode;
+                            bytes = bigEndianUnicode.GetBytes(stringCollections[j]);
+                            num = (int)bytes.Length;
+                        }
+                        else
+                        {
+                            bytes = TextDataConverter.SeptetsToOctetsInt(stringCollections[j]);
+                            num = stringCollections[j].Length;
+                        }
+                        SmsSubmitPdu smsSubmitPdu1 = new SmsSubmitPdu();
+                        smsSubmitPdu1.DestinationAddress = destinationAddress;
+                        if (unicode)
+                        {
+                            smsSubmitPdu1.DataCodingScheme = 8;
+                        }
+                        smsSubmitPdu1.SetUserData(bytes, (byte)num);
+                        smsSubmitPdu1.AddUserDataHeader(numArray);
+                        smsSubmitPduArray1[j] = smsSubmitPdu1;
+                    }
+                    return smsSubmitPduArray1;
+                }
+                else
+                {
+                    throw new ArgumentException("A concatenated message must not have more than 255 parts.", "userDataText");
+                }
+            }
+        }
+        protected static ushort CalcNextRefNumber()
+        {
+            ushort num;
+            lock (typeof(SmartMessageFactory))
+            {
+                num = refNumber;
+                if (refNumber != 65535)
+                {
+                    refNumber = (ushort)(refNumber + 1);
+                }
+                else
+                {
+                    refNumber = 1;
+                }
+            }
+            return num;
+        }
+        string ValidateMessage(string message)
+        {
+            string replacedString = "";
+            replacedString = message.Replace("[","(").Replace("]", ")").Replace('\\', '/').Replace('\\', '/');
+            return replacedString;
         }
         #endregion
 
@@ -952,212 +1158,6 @@ namespace Scenario.GSMSMSEngine
         }
 
         #endregion
-
-
-        public void setConnected(Modem SelectedComm)
-        {
-            string cmbCOM = SelectedComm.GsmCommMain.PortName;
-            if (cmbCOM == "")
-            {
-                MessageBox.Show("Invalid Port Name");
-                return;
-            }
-            SelectedComm.GsmCommMain = new GsmCommMain(cmbCOM, 115200, 150);
-            //Cursor.Current = Cursors.Default;
-
-            bool retry;
-            do
-            {
-                retry = false;
-                try
-                {
-                    //Cursor.Current = Cursors.WaitCursor;
-                    SelectedComm.GsmCommMain.Open();
-                    //Cursor.Current = Cursors.Default;
-                    MessageBox.Show("Modem Connected Sucessfully");
-                }
-                catch (Exception)
-                {
-                    //Cursor.Current = Cursors.Default;                    
-                }
-            }
-            while (retry);
-
-        }
-        static void DataReceived(object sender, SerialDataReceivedEventArgs e)
-        {
-            try
-            {
-                if (e.EventType == SerialData.Chars)
-                    readNow.Set();
-            }
-            catch (Exception ex)
-            {
-                throw ex;
-            }
-        }
-
-        #endregion
-
-
-        //public static SmsSubmitPdu[] CreateConcatTextMessage(string userDataText, string destinationAddress)
-        //{
-        //    return SmartMessageFactory.CreateConcatTextMessage(userDataText, false, destinationAddress);
-        //}
-
-        /// <summary>
-        /// Creates a concatenated text message.
-        /// </summary>
-        /// <param name="userDataText">The message text.</param>
-        /// <param name="unicode">Specifies if the userDataText is to be encoded as Unicode. If not, the GSM 7-bit default alphabet is used.</param>
-        /// <param name="destinationAddress">The message's destination address.</param>
-        /// <returns>A set of <see cref="T:GsmComm.PduConverter.SmsSubmitPdu" /> objects that represent the message.</returns>
-        /// <remarks>
-        /// <para>A concatenated message makes it possible to exceed the maximum length of a normal message,
-        /// created by splitting the message data into multiple parts.</para>
-        /// <para>Concatenated messages are also known as long or multi-part messages.</para>
-        /// <para>If no concatenation is necessary, a single, non-concatenated <see cref="T:GsmComm.PduConverter.SmsSubmitPdu" /> object is created.</para>
-        /// </remarks>
-        /// <exception cref="T:System.ArgumentException"><para>userDataText is so long that it would create more than 255 message parts.</para></exception>
-        public static SmsSubmitPdu[] CreateConcatTextMessage(string userDataText, bool unicode, string destinationAddress)
-        {
-            string str;
-            int length = 0;
-            int num;
-            byte[] bytes;
-            SmsSubmitPdu smsSubmitPdu;
-            int num1;
-            byte num2;
-            if (unicode)
-            {
-                num1 = 70;
-            }
-            else
-            {
-                num1 = 160;
-            }
-            int num3 = num1;
-            if (unicode)
-            {
-                str = userDataText;
-            }
-            else
-            {
-                str = TextDataConverter.StringTo7Bit(userDataText);
-            }
-            if (str.Length <= num3)
-            {
-                if (unicode)
-                {
-                    smsSubmitPdu = new SmsSubmitPdu(userDataText, destinationAddress, 8);
-                }
-                else
-                {
-                    smsSubmitPdu = new SmsSubmitPdu(userDataText, destinationAddress);
-                }
-                SmsSubmitPdu[] smsSubmitPduArray = new SmsSubmitPdu[1];
-                smsSubmitPduArray[0] = smsSubmitPdu;
-                return smsSubmitPduArray;
-            }
-            else
-            {
-                ConcatMessageElement16 concatMessageElement16 = new ConcatMessageElement16(0, 0, 0);
-                byte length1 = (byte)((int)SmartMessageFactory.CreateUserDataHeader(concatMessageElement16).Length);
-                byte num4 = (byte)((double)length1 / 7 * 8);
-                if (unicode)
-                {
-                    num2 = length1;
-                }
-                else
-                {
-                    num2 = num4;
-                }
-                byte num5 = num2;
-                StringCollection stringCollections = new StringCollection();
-                for (int i = 0; i < str.Length; i = i + length)
-                {
-                    if (!unicode)
-                    {
-                        if (str.Length - i < num3 - num5)
-                        {
-                            length = str.Length - i;
-                        }
-                        else
-                        {
-                            length = num3 - num5;
-                        }
-                    }
-                    else
-                    {
-                        if (str.Length - i < (num3 * 2 - num5) / 2)
-                        {
-                            length = str.Length - i;
-                        }
-                        else
-                        {
-                            length = (num3 * 2 - num5) / 2;
-                        }
-                    }
-                    string str1 = str.Substring(i, length);
-                    stringCollections.Add(str1);
-                }
-                if (stringCollections.Count <= 255)
-                {
-                    SmsSubmitPdu[] smsSubmitPduArray1 = new SmsSubmitPdu[stringCollections.Count];
-                    ushort num6 = CalcNextRefNumber();
-                    byte num7 = 0;
-                    for (int j = 0; j < stringCollections.Count; j++)
-                    {
-                        num7 = (byte)(num7 + 1);
-                        ConcatMessageElement16 concatMessageElement161 = new ConcatMessageElement16(num6, (byte)stringCollections.Count, num7);
-                        byte[] numArray = SmartMessageFactory.CreateUserDataHeader(concatMessageElement161);
-                        if (unicode)
-                        {
-                            Encoding bigEndianUnicode = Encoding.BigEndianUnicode;
-                            bytes = bigEndianUnicode.GetBytes(stringCollections[j]);
-                            num = (int)bytes.Length;
-                        }
-                        else
-                        {
-                            bytes = TextDataConverter.SeptetsToOctetsInt(stringCollections[j]);
-                            num = stringCollections[j].Length;
-                        }
-                        SmsSubmitPdu smsSubmitPdu1 = new SmsSubmitPdu();
-                        smsSubmitPdu1.DestinationAddress = destinationAddress;
-                        if (unicode)
-                        {
-                            smsSubmitPdu1.DataCodingScheme = 8;
-                        }
-                        smsSubmitPdu1.SetUserData(bytes, (byte)num);
-                        smsSubmitPdu1.AddUserDataHeader(numArray);
-                        smsSubmitPduArray1[j] = smsSubmitPdu1;
-                    }
-                    return smsSubmitPduArray1;
-                }
-                else
-                {
-                    throw new ArgumentException("A concatenated message must not have more than 255 parts.", "userDataText");
-                }
-            }
-        }
-
-        protected static ushort CalcNextRefNumber()
-        {
-            ushort num;
-            lock (typeof(SmartMessageFactory))
-            {
-                num = refNumber;
-                if (refNumber != 65535)
-                {
-                    refNumber = (ushort)(refNumber + 1);
-                }
-                else
-                {
-                    refNumber = 1;
-                }
-            }
-            return num;
-        }
-
+        
     }
 }
